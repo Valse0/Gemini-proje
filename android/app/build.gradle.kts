@@ -58,6 +58,9 @@ dependencies {
 
     // ML Kit On-device OCR
     implementation(libs.mlkit.text.recognition)
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-japanese:16.0.0")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-korean:16.0.0")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-chinese:16.0.0")
 
     // Backend HTTP Client
     implementation(libs.okhttp)

@@ -1,10 +1,10 @@
-
 name: Build Luma Translate APK
 
 on:
   push:
     branches:
       - main
+      - master
   workflow_dispatch:
 
 permissions:
@@ -12,34 +12,57 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Android APK & AAB
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js (for asset/web build check if needed)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Make Gradle wrapper executable
-        working-directory: android
-        run: chmod +x gradlew
+      - name: Verify custom launcher icon exists
+        run: |
+          ls -la android/app/src/main/res/drawable/ic_launcher.webp
+          ls -la android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp
 
-      - name: Build debug APK
-        working-directory: android
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build Debug APK
         run: ./gradlew assembleDebug
+        working-directory: android
 
-      - name: Upload APK
+      - name: Build Release Bundle (AAB)
+        run: ./gradlew bundleRelease
+        working-directory: android
+        env:
+          ORG_GRADLE_PROJECT_shouldSign: false
+
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Luma-Translate-APK
+          name: Luma-Translate-Debug-APK
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Release Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Luma-Translate-Release-AAB
+          path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: ignore
           retention-days: 14

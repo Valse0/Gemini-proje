@@ -30,21 +30,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Verify custom launcher icon exists
+      - name: Clean and Re-initialize Gradle Wrapper
+        working-directory: android
         run: |
-          ls -la android/app/src/main/res/drawable/ic_launcher.webp
-          ls -la android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
+          rm -rf gradle/wrapper
+          mkdir -p gradle/wrapper
+          gradle wrapper --gradle-version 8.5
+          chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug
         working-directory: android
+        run: ./gradlew assembleDebug
 
       - name: Build Release Bundle (AAB)
-        run: ./gradlew bundleRelease
         working-directory: android
+        run: ./gradlew bundleRelease
         env:
           ORG_GRADLE_PROJECT_shouldSign: false
 

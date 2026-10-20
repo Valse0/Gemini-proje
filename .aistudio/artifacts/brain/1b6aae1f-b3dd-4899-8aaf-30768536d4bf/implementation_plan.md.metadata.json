@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for Phase 3: On-device OCR architecture, dynamic ML Kit recognizers for Japanese, Korean, Chinese, and English, bounding box coordinate projection, and interactive image upload & recognition tester.",
+  "updatedAt":  "2026-10-20T19:27:24.832242547Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+bun.lock
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+local.properties
+
+# Android and Gradle
+.gradle/
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Node.js
+npm-debug.log*
+*.log
+
+# IDE and operating system
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

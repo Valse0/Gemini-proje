@@ -1,0 +1,6 @@
+{
+  "name": "Luma Translate",
+  "description": "Native Android screen translation application and secure backend translation engine with privacy-first on-device OCR.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

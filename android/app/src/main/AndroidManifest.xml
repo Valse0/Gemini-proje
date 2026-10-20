@@ -16,9 +16,9 @@
     <application
         android:name=".app.LumaApplication"
         android:allowBackup="false"
-        android:icon="@android:drawable/sym_def_app_icon"
+        android:icon="@drawable/ic_launcher"
         android:label="Luma Translate"
-        android:roundIcon="@android:drawable/sym_def_app_icon"
+        android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
 

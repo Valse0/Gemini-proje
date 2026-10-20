@@ -30,9 +30,6 @@ androidx-material3 = { group = "androidx.compose.material3", name = "material3" 
 
 # ML Kit On-device Text Recognition
 mlkit-text-recognition = { group = "com.google.android.gms", name = "play-services-mlkit-text-recognition", version.ref = "mlkitOcr" }
-mlkit-text-japanese = { group = "com.google.android.gms", name = "play-services-mlkit-text-recognition-japanese", version.ref = "mlkitJapanese" }
-mlkit-text-korean = { group = "com.google.android.gms", name = "play-services-mlkit-text-recognition-korean", version.ref = "mlkitKorean" }
-mlkit-text-chinese = { group = "com.google.android.gms", name = "play-services-mlkit-text-recognition-chinese", version.ref = "mlkitChinese" }
 
 # Networking (Backend Translation Client)
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }

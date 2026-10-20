@@ -29,7 +29,7 @@ object LanguageRecognizerFactory {
             }
             else -> {
                 // Default to Latin recognizer (English, Turkish, Spanish, etc.)
-                TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                TextRecognition.getClient(TextRecognizerOptions.Builder().build())
             }
         }
     }

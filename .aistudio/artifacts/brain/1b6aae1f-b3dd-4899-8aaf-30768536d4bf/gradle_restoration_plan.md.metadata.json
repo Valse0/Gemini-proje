@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan to restore missing Gradle wrapper files by initializing a temporary Android project.",
+  "updatedAt":  "2026-10-20T21:07:08.164970511Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

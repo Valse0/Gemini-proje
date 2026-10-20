@@ -12,8 +12,8 @@ android {
         applicationId = "com.luma.translate"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = System.getenv("BUILD_NUMBER")?.toInt() ?: 1
+        versionName = "0.1.${System.getenv("BUILD_NUMBER") ?: "0"}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

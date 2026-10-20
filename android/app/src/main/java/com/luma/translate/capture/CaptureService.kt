@@ -18,6 +18,7 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import com.luma.translate.MainActivity
+import com.luma.translate.ui.overlay.FloatingOverlayManager
 
 /**
  * Foreground Service managing Android MediaProjection screen capture.
@@ -43,6 +44,7 @@ class CaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
     private var isCapturing = false
+    private var overlayManager: FloatingOverlayManager? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): CaptureService = this@CaptureService
@@ -157,13 +159,16 @@ class CaptureService : Service() {
             null,
             null
         )
+        
+        overlayManager = FloatingOverlayManager(this) {
+            val bitmap = captureCurrentFrame()
+            // To be implemented: trigger OCR and translation flow
+        }
+        overlayManager?.show()
+        
         isCapturing = true
     }
 
-    /**
-     * Capture single frame for OCR on user demand.
-     * Keeps processing entirely on-device and releases native Image buffers immediately.
-     */
     fun captureCurrentFrame(): Bitmap? {
         val image = imageReader?.acquireLatestImage() ?: return null
         return try {
@@ -190,6 +195,9 @@ class CaptureService : Service() {
     fun stopCapture() {
         if (!isCapturing) return
         isCapturing = false
+
+        overlayManager?.remove()
+        overlayManager = null
 
         virtualDisplay?.release()
         virtualDisplay = null

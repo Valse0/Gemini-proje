@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan to implement the missing floating overlay UI (bubble) and necessary WindowManager service integration to enable on-demand screen translation.",
+  "updatedAt":  "2026-10-20T22:53:52.529126794Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

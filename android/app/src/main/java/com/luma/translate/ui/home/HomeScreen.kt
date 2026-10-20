@@ -30,6 +30,8 @@ enum class SessionState {
 fun HomeScreen(
     isOverlayPermissionGranted: Boolean,
     onRequestOverlayPermission: () -> Unit,
+    onStartCapture: () -> Unit,
+    onStopCapture: () -> Unit,
     onOpenPrivacyInfo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -173,7 +175,13 @@ fun HomeScreen(
                     if (!isOverlayPermissionGranted) {
                         onRequestOverlayPermission()
                     } else {
-                        sessionState = if (sessionState == SessionState.ACTIVE_OVERLAY) SessionState.IDLE else SessionState.ACTIVE_OVERLAY
+                        if (sessionState == SessionState.ACTIVE_OVERLAY) {
+                            onStopCapture()
+                            sessionState = SessionState.IDLE
+                        } else {
+                            onStartCapture()
+                            sessionState = SessionState.ACTIVE_OVERLAY
+                        }
                     }
                 },
                 modifier = Modifier

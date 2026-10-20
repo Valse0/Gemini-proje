@@ -1,0 +1,6 @@
+{
+  "summary":  "Plan to resolve APK installation conflicts by increasing version codes and enforcing consistent debug/release signing configs.",
+  "updatedAt":  "2026-10-20T22:33:38.995081243Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

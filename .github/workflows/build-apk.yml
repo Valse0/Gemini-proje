@@ -19,11 +19,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -32,19 +27,22 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
         env:
           BUILD_NUMBER: ${{ github.run_number }}
 
-      - name: Build Release Bundle (AAB)
+      - name: Build Release APK & Bundle (AAB)
         working-directory: android
-        run: ./gradlew bundleRelease
+        run: ./gradlew assembleRelease bundleRelease --stacktrace
         env:
           ORG_GRADLE_PROJECT_shouldSign: false
           BUILD_NUMBER: ${{ github.run_number }}
@@ -55,6 +53,14 @@ jobs:
           name: Luma-Translate-Debug-APK
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Luma-Translate-Release-APK
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Upload Release Bundle Artifact

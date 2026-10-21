@@ -40,8 +40,6 @@ class FloatingOverlayManager(private val context: Context, private val onTrigger
         }
 
         val composeView = ComposeView(context).apply {
-            // Fix: Explicitly set composition context to root context to avoid crash
-            setCompositionContext(androidx.compose.ui.platform.findCompositionContext(context as android.app.Activity))
             setContent {
                 OverlayButton(onTrigger)
             }

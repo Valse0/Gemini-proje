@@ -86,17 +86,23 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "# Build Error Report - $(date)" > yml_hata.md
+          echo "GitHub Actions Run: #${{ github.run_number }}" >> yml_hata.md
+          echo "" >> yml_hata.md
           if [ -f build_error.log ]; then
-            echo "# Build Error Report - $(date)" > yml_hata.md
+            echo "## Error Root Cause & Failure Details" >> yml_hata.md
             echo "\`\`\`" >> yml_hata.md
-            tail -n 200 build_error.log >> yml_hata.md
+            grep -A 15 -B 2 "What went wrong:" build_error.log || tail -n 150 build_error.log
+            echo "" >> yml_hata.md
+            echo "---" >> yml_hata.md
+            echo "## Full Build Log Tail" >> yml_hata.md
+            tail -n 150 build_error.log
             echo "\`\`\`" >> yml_hata.md
           else
-            echo "# Build Error Report - $(date)" > yml_hata.md
-            echo "Build failed at run #${{ github.run_number }}." >> yml_hata.md
+            echo "Build failed at run #${{ github.run_number }} before build_error.log was generated." >> yml_hata.md
           fi
           git add yml_hata.md
-          git commit -m "chore: auto-update yml_hata.md with latest build error [skip ci]" || echo "No changes to commit"
+          git commit -m "chore: auto-update yml_hata.md with detailed build error [skip ci]" || echo "No changes to commit"
           git push origin HEAD:${{ github.ref_name }} || echo "Push failed (check repository workflow permissions for GITHUB_TOKEN)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

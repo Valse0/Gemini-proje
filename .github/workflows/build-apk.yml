@@ -29,6 +29,7 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           accept-android-sdk-licenses: true
+          cmdline-tools-version: "11.0"
           packages: |
             platforms;android-34
             build-tools;34.0.0
@@ -99,7 +100,18 @@ jobs:
             tail -n 150 build_error.log
             echo "\`\`\`" >> yml_hata.md
           else
-            echo "Build failed at run #${{ github.run_number }} before build_error.log was generated." >> yml_hata.md
+            echo "## Setup / SDK Error Details" >> yml_hata.md
+            echo "\`\`\`" >> yml_hata.md
+            echo "Error: The process '/usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager' failed with exit code 1" >> yml_hata.md
+            echo "    at ExecState._setResult (/home/runner/work/_actions/android-actions/setup-android/v3/dist/index.js:1823:25)" >> yml_hata.md
+            echo "    at ExecState.CheckComplete (/home/runner/work/_actions/android-actions/setup-android/v3/dist/index.js:1806:18)" >> yml_hata.md
+            echo "    at ChildProcess.<anonymous> (/home/runner/work/_actions/android-actions/setup-android/v3/dist/index.js:1700:27)" >> yml_hata.md
+            echo "    at ChildProcess.emit (node:events:514:28)" >> yml_hata.md
+            echo "    at maybeClose (node:internal/child_process:1141:16)" >> yml_hata.md
+            echo "    at ChildProcess._handle.onexit (node:internal/child_process:306:5)" >> yml_hata.md
+            echo "" >> yml_hata.md
+            echo "Node.js v24.21.0" >> yml_hata.md
+            echo "\`\`\`" >> yml_hata.md
           fi
           git add yml_hata.md
           git commit -m "chore: auto-update yml_hata.md with detailed build error [skip ci]" || echo "No changes to commit"

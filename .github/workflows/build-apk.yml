@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -28,21 +28,31 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
-          build-tools: 34.0.0
+          accept-android-sdk-licenses: true
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
+            platform-tools
+
+      - name: Accept all Android SDK licenses explicitly
+        run: |
+          yes | sdkmanager --licenses || true
+          if [ -n "$ANDROID_SDK_ROOT" ] && [ -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          fi
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace 2>&1 | tee ../build_error.log
         env:
           BUILD_NUMBER: ${{ github.run_number }}
 
       - name: Build Release APK & Bundle (AAB)
         working-directory: android
-        run: ./gradlew assembleRelease bundleRelease --stacktrace
+        run: ./gradlew assembleRelease bundleRelease --stacktrace 2>&1 | tee -a ../build_error.log
         env:
           ORG_GRADLE_PROJECT_shouldSign: false
           BUILD_NUMBER: ${{ github.run_number }}
@@ -70,3 +80,23 @@ jobs:
           path: android/app/build/outputs/bundle/release/*.aab
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Update yml_hata.md on failure
+        if: failure()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f build_error.log ]; then
+            echo "# Build Error Report - $(date)" > yml_hata.md
+            echo "\`\`\`" >> yml_hata.md
+            tail -n 200 build_error.log >> yml_hata.md
+            echo "\`\`\`" >> yml_hata.md
+          else
+            echo "# Build Error Report - $(date)" > yml_hata.md
+            echo "Build failed at run #${{ github.run_number }}." >> yml_hata.md
+          fi
+          git add yml_hata.md
+          git commit -m "chore: auto-update yml_hata.md with latest build error [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref_name }} || echo "Push failed (check repository workflow permissions for GITHUB_TOKEN)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

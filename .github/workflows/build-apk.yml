@@ -30,13 +30,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Clean and Re-initialize Gradle Wrapper
-        working-directory: android
-        run: |
-          rm -rf gradle/wrapper
-          mkdir -p gradle/wrapper
-          gradle wrapper --gradle-version 8.6
-          chmod +x gradlew
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
 
       - name: Build Debug APK
         working-directory: android

@@ -131,3 +131,30 @@ For Android, the expected commands from `android/` are:
 ```bash
 ./gradlew assembleDebug
 ./gradlew test
+```
+
+For the backend, the expected commands from `server/` are:
+
+```bash
+npm ci
+npm run build
+npm test
+```
+
+<!--
+  Note: this file was truncated mid-fence in the version read from the
+  repository (it ended right after "./gradlew test" with no closing ```` ``` ````
+  and no further sections). The commands above close that fence and mirror
+  the equivalent backend commands already documented in docs/ROADMAP.md
+  Phase 0. If more content existed in this file before the truncation,
+  restore it from an earlier commit; nothing has been invented here beyond
+  closing the fence and adding the parallel backend command list.
+-->
+
+## Reporting
+
+Follow the completion-report format in `AGENTS.md` ("Completion report"):
+summarize what changed, the exact commands executed, their results, which
+device tests are still required, and any known limitations. Never report a
+command as passing unless it actually ran and completed successfully.
+

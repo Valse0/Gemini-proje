@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -25,18 +25,36 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: true
-          packages: platforms;android-34 build-tools;34.0.0 platform-tools
-
-      - name: Accept all Android SDK licenses explicitly
+      # ubuntu-latest runners ship with an Android SDK already installed under
+      # ANDROID_HOME/ANDROID_SDK_ROOT, with licenses pre-accepted by the image.
+      # The previous "android-actions/setup-android@v3" step re-downloaded and
+      # pointed at its own cmdline-tools build, and the job was failing inside
+      # that action at "sdkmanager --licenses" before Gradle ever ran (see
+      # yml_hata.md / run #21). Using the SDK already on the image removes that
+      # extra moving part. We still (re-)accept licenses defensively and make
+      # sure the exact platform/build-tools the Gradle config needs are
+      # present, without treating an already-satisfied step as a failure.
+      - name: Verify preinstalled Android SDK and required packages
         run: |
-          yes | sdkmanager --licenses || true
-          if [ -n "$ANDROID_SDK_ROOT" ] && [ -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
-            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          set -eu
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "Using Android SDK at: $SDK_ROOT"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            # Fall back to whatever cmdline-tools version the image shipped.
+            SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -maxdepth 2 -name sdkmanager -type f 2>/dev/null | sort | tail -n1)"
           fi
+          if [ -z "${SDKMANAGER:-}" ] || [ ! -x "$SDKMANAGER" ]; then
+            echo "::error::No usable sdkmanager found under $SDK_ROOT/cmdline-tools. The runner image may have changed; a cmdline-tools install step is needed again."
+            exit 1
+          fi
+          echo "Using sdkmanager at: $SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -78,39 +96,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Update yml_hata.md on failure
+      # On failure, upload whatever log exists as a build artifact instead of
+      # committing a report back into the repository. The previous version of
+      # this step pushed a commit to main/master on every failed run, and its
+      # fallback branch (used whenever the failure happened before
+      # build_error.log existed, e.g. during SDK setup) wrote a hardcoded,
+      # unchanging error message rather than the real cause of that specific
+      # run. That made yml_hata.md look like a live diagnostic file while
+      # actually being a static placeholder, and caused unbounded commit
+      # churn on the default branch from an automated workflow.
+      - name: Upload build log on failure
         if: failure()
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          echo "# Build Error Report - $(date)" > yml_hata.md
-          echo "GitHub Actions Run: #${{ github.run_number }}" >> yml_hata.md
-          echo "" >> yml_hata.md
-          if [ -f build_error.log ]; then
-            echo "## Error Root Cause & Failure Details" >> yml_hata.md
-            echo "\`\`\`" >> yml_hata.md
-            grep -A 15 -B 2 "What went wrong:" build_error.log || tail -n 150 build_error.log
-            echo "" >> yml_hata.md
-            echo "---" >> yml_hata.md
-            echo "## Full Build Log Tail" >> yml_hata.md
-            tail -n 150 build_error.log
-            echo "\`\`\`" >> yml_hata.md
-          else
-            echo "## Setup / SDK Error Details" >> yml_hata.md
-            echo "\`\`\`" >> yml_hata.md
-            echo "Error: The process '/usr/local/lib/android/sdk/cmdline-tools/16.0/bin/sdkmanager' failed with exit code 1" >> yml_hata.md
-            echo "    at ExecState._setResult (/home/runner/work/_actions/android-actions/setup-android/v3/dist/index.js:1823:25)" >> yml_hata.md
-            echo "    at ExecState.CheckComplete (/home/runner/work/_actions/android-actions/setup-android/v3/dist/index.js:1806:18)" >> yml_hata.md
-            echo "    at ChildProcess.<anonymous> (/home/runner/work/_actions/android-actions/setup-android/v3/dist/index.js:1700:27)" >> yml_hata.md
-            echo "    at ChildProcess.emit (node:events:514:28)" >> yml_hata.md
-            echo "    at maybeClose (node:internal/child_process:1141:16)" >> yml_hata.md
-            echo "    at ChildProcess._handle.onexit (node:internal/child_process:306:5)" >> yml_hata.md
-            echo "" >> yml_hata.md
-            echo "Node.js v24.21.0" >> yml_hata.md
-            echo "\`\`\`" >> yml_hata.md
-          fi
-          git add yml_hata.md
-          git commit -m "chore: auto-update yml_hata.md with detailed build error [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:${{ github.ref_name }} || echo "Push failed (check repository workflow permissions for GITHUB_TOKEN)"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-failure-log-${{ github.run_number }}
+          path: build_error.log
+          if-no-files-found: warn
+          retention-days: 14

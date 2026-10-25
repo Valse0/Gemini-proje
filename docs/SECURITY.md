@@ -104,16 +104,22 @@ Before a commit or release:
 git status --short
 git diff --check
 git diff
+```
+
 Use an available secret-scanning tool where practical.
 Never run destructive Git commands merely to make the repository clean.
 Do not rewrite shared history without explicit authorization.
-10. Error handling and logging
-Do not return stack traces to the client.
-Do not log translation text or provider credentials.
-Do not log authorization headers.
-Use normalized error categories.
-Keep operational logs useful without collecting content.
-11. Security acceptance criteria
+
+## 10. Error handling and logging
+
+- Do not return stack traces to the client.
+- Do not log translation text or provider credentials.
+- Do not log authorization headers.
+- Use normalized error categories.
+- Keep operational logs useful without collecting content.
+
+## 11. Security acceptance criteria
+
 Before a release candidate:
 * No provider secret is embedded in the APK.
 * No real credentials are committed.

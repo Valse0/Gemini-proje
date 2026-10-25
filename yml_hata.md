@@ -1,5 +1,17 @@
-# Build Error Report - Wed Oct 21 19:10:36 UTC 2026
+# Build Error Report (historical) - Wed Oct 21 19:10:36 UTC 2026
 GitHub Actions Run: #21
+
+> **Note (2026-10-24):** This file was being overwritten automatically by the
+> "Update yml_hata.md on failure" step in `.github/workflows/build-apk.yml`.
+> That step had a hardcoded fallback for failures that happened before the
+> Gradle build ran, so this exact message would have been re-committed for
+> *any* pre-Gradle failure, not necessarily today's real cause. The workflow
+> has been changed to upload the build log as a workflow artifact instead of
+> committing back to the repository, and to use the Android SDK already
+> preinstalled on the GitHub-hosted runner instead of `android-actions/setup-android@v3`,
+> which is where this specific failure occurred. See `docs/RELEASE.md` and
+> the verification report in this delivery for details. This file is kept
+> for history and is no longer updated automatically.
 
 ## Setup / SDK Error Details
 ```

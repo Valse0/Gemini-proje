@@ -1,11 +1,3 @@
-
----
-
-## 3. `AGENTS.md`
-
-Dosya yolu: `AGENTS.md`
-
-```markdown
 # Luma Translate — Agent Rules
 
 These rules apply to every AI coding agent working on this repository.

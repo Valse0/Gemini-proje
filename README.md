@@ -79,50 +79,83 @@ logs, and operational settings have been verified.
 
 ## Repository layout
 
+This reflects what is actually in the repository today, not an aspirational
+target. `androidTest/` is referenced by Gradle (Espresso/Compose UI test
+dependencies) but does not exist yet — see `docs/TESTING.md` and the
+known-issues list for that gap.
+
 ```text
 luma-translate/
 ├── README.md
 ├── AGENTS.md
 ├── GEMINI.md
+├── CHANGELOG.md
 ├── .gitignore
-├── android/
+├── .github/workflows/build-apk.yml   # CI: debug/release APK + AAB build
+├── android/                          # Primary product: native Kotlin/Compose app
 │   ├── settings.gradle.kts
 │   ├── build.gradle.kts
 │   ├── gradle.properties
+│   ├── gradle/libs.versions.toml
 │   └── app/
 │       ├── build.gradle.kts
+│       ├── proguard-rules.pro
 │       └── src/
 │           ├── main/
 │           │   ├── AndroidManifest.xml
 │           │   └── java/com/luma/translate/
 │           │       ├── MainActivity.kt
-│           │       ├── app/
+│           │       ├── app/              # Application class
 │           │       ├── ui/
 │           │       │   ├── theme/
 │           │       │   ├── home/
-│           │       │   ├── settings/
-│           │       │   └── overlay/
-│           │       ├── capture/
-│           │       ├── ocr/
-│           │       ├── translation/
-│           │       ├── overlay/
-│           │       ├── data/
-│           │       └── core/
-│           ├── test/
-│           └── androidTest/
-├── server/
+│           │       │   ├── overlay/       # Compose UI for the floating control
+│           │       │   └── privacy/
+│           │       ├── capture/           # MediaProjection + permission flow
+│           │       ├── ocr/               # ML Kit on-device text recognition
+│           │       ├── pipeline/           # OCR -> translation orchestration
+│           │       ├── translation/       # Backend client contract
+│           │       ├── settings/
+│           │       └── release/
+│           └── test/                      # JVM unit tests (no androidTest/ yet)
+├── server/                           # Secure, replaceable-provider translation API
 │   ├── package.json
 │   ├── tsconfig.json
+│   ├── test/translate.test.ts
 │   └── src/
 │       ├── index.ts
-│       ├── routes/
-│       ├── services/
-│       ├── middleware/
-│       └── config.ts
+│       ├── app.ts
+│       ├── config.ts
+│       ├── routes/            # /health, /v1/translate, /v1/provider-info
+│       ├── services/          # provider interface, Gemini + mock providers
+│       └── middleware/        # request validation, rate limiting
+├── src/, index.html, vite.config.ts, server.ts, package.json
+│                                    # React/Vite web companion: build/test/OCR
+│                                    # diagnostic dashboards, NOT the shipping
+│                                    # product. See "Keep the three project
+│                                    # areas separate" below.
 └── docs/
     ├── ARCHITECTURE.md
     ├── ROADMAP.md
     ├── TESTING.md
     ├── PRIVACY.md
     ├── SECURITY.md
-    └── RELEASE.md
+    ├── RELEASE.md
+    ├── VERIFICATION_REPORT.md
+    └── KNOWN_ISSUES.md
+```
+
+## Keep the three project areas separate
+
+- **Android (`android/`)** is the primary, user-facing product. Prioritize
+  its buildability, permissions, lifecycle handling, OCR, translation, and
+  overlay behavior over anything else in this repository.
+- **Backend (`server/`)** is a small, provider-independent translation API.
+  It must stay secure, validated, and testable, and must never expose
+  provider credentials to any client.
+- **Web app (`src/`, `index.html`, root `vite.config.ts`/`package.json`)** is
+  a development, testing, and diagnostic companion (acceptance-suite,
+  Android-behavior simulation, OCR visualization, release and settings
+  dashboards). It is not the shipping product and should not be grown into
+  one, merged with the Android UI, or used to introduce a second UI
+  framework into the Android app.

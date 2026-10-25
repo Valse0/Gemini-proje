@@ -1,11 +1,3 @@
-
----
-
-## 8. `docs/PRIVACY.md`
-
-Dosya yolu: `docs/PRIVACY.md`
-
-```markdown
 # Privacy Policy and Data Handling — Luma Translate
 
 ## 1. Purpose

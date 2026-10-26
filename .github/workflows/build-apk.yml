@@ -53,11 +53,16 @@ jobs:
           fi
           echo "Using sdkmanager at: $SDKMANAGER"
 
+          # Grant ownership of SDK_ROOT to runner user so sdkmanager can write licenses and packages
+          sudo chown -R "$USER:$USER" "$SDK_ROOT" || true
+
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          build-root-directory: android
 
       - name: Build Debug APK
         working-directory: android

@@ -13,6 +13,10 @@ coverage/
 !.env.example
 *.jks
 *.keystore
+# Exception: the shared, non-secret debug keystore used to give every debug
+# build (local and CI) a stable signing identity so ordinary updates install
+# cleanly. See the signingConfigs comment in android/app/build.gradle.kts.
+!android/app/debug.keystore
 local.properties
 
 # Android and Gradle

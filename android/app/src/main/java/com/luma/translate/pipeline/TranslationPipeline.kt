@@ -1,6 +1,7 @@
 package com.luma.translate.pipeline
 
 import android.graphics.Bitmap
+import com.luma.translate.BuildConfig
 import com.luma.translate.ocr.NormalizedRect
 import com.luma.translate.ocr.OcrManager
 import com.luma.translate.ocr.OcrResult
@@ -58,7 +59,12 @@ sealed class PipelineResult {
  */
 class TranslationPipeline(
     private val ocrManager: OcrManager,
-    private val backendBaseUrl: String = "http://10.0.2.2:3000",
+    // Was hardcoded to the Android-emulator-only loopback alias
+    // "http://10.0.2.2:3000" with no way to override it for a real device
+    // or a non-local backend. Now sourced from BuildConfig.BACKEND_BASE_URL,
+    // which is itself configurable per build (see app/build.gradle.kts /
+    // -PLUMA_BACKEND_URL / android/local.properties) without touching code.
+    private val backendBaseUrl: String = BuildConfig.BACKEND_BASE_URL,
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)

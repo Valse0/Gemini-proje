@@ -65,12 +65,43 @@ jobs:
         env:
           BUILD_NUMBER: ${{ github.run_number }}
 
+      # Release signing is optional and secret-driven. When a real signing
+      # key is stored in repository secrets, decode it to a local file (never
+      # committed, never logged) and point Gradle at it via project
+      # properties, matching the conditional signingConfigs.release block in
+      # android/app/build.gradle.kts. When the secret isn't configured, this
+      # step is skipped and the release build proceeds unsigned, which is a
+      # safer default than silently reusing the debug key for a release
+      # artifact. The previous `ORG_GRADLE_PROJECT_shouldSign: false` env var
+      # on the next step didn't correspond to anything Gradle actually read
+      # (no `shouldSign` property existed anywhere in the build scripts), so
+      # it has been removed rather than kept as dead configuration.
+      - name: Decode release signing key (if configured)
+        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        working-directory: android
+        run: echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+
       - name: Build Release APK & Bundle (AAB)
         working-directory: android
-        run: ./gradlew assembleRelease bundleRelease --stacktrace 2>&1 | tee -a ../build_error.log
+        run: |
+          if [ -f app/release.keystore ]; then
+            ./gradlew assembleRelease bundleRelease --stacktrace \
+              -PRELEASE_STORE_FILE=release.keystore \
+              -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD" \
+              -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
+              -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD" \
+              2>&1 | tee -a ../build_error.log
+          else
+            echo "No release signing secrets configured; building an unsigned release artifact."
+            ./gradlew assembleRelease bundleRelease --stacktrace 2>&1 | tee -a ../build_error.log
+          fi
         env:
-          ORG_GRADLE_PROJECT_shouldSign: false
           BUILD_NUMBER: ${{ github.run_number }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4

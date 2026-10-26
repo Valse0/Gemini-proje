@@ -11,11 +11,30 @@ npm registry. Every item below marked "code review only" was found by
 reading the source, not by compiling or running it. See
 `docs/VERIFICATION_REPORT.md` for exactly what was and wasn't run.
 
+**Update (Critical Bug Fixes pass):** issues #1, #2, and #3 below were
+addressed in a later session (see `docs/AGENT_PROGRESS.md` for full
+reasoning). They are left in place, with their status lines updated, rather
+than deleted, so the original diagnosis stays on record — the fixes are
+themselves still only code-review-verified, same as everything else in this
+file.
+
 ## Highest priority
 
 ### 1. The end-to-end translation flow is not wired together
 
-**Status:** confirmed by code review (pre-existing, not introduced this pass).
+**Status:** FIXED (code review only, not build/device-verified) — see
+`docs/AGENT_PROGRESS.md`, "Bug 5/6 (core) — end-to-end pipeline wiring."
+`CaptureService.kt` now instantiates `OcrManager`/`TranslationPipeline` and
+runs a real capture → OCR → backend-translate → overlay-result cycle on
+bubble tap. Two *additional*, previously-undiscovered root causes were also
+found and fixed while wiring this: no Network Security Config (cleartext
+HTTP to the dev backend was blocked by default on API 28+), and a hardcoded
+emulator-only backend URL (now `BuildConfig.BACKEND_BASE_URL`, overridable).
+**Still needs a real device/emulator test** — nothing below this line has
+changed that requirement, it has only gone from "nothing is wired" to
+"something is wired, unverified."
+
+Original diagnosis (pre-fix), kept for the record:
 
 `android/app/src/main/java/com/luma/translate/pipeline/TranslationPipeline.kt`
 and `ocr/OcrManager.kt` are fully implemented, with their own contract unit
@@ -67,9 +86,13 @@ practice, but was written without a compiler available to confirm it builds.
 
 ### 3. `isCapturing` UI state is set optimistically, not from the actual result
 
-**Status:** confirmed by code review (pre-existing, not introduced this pass).
+**Status:** FIXED (code review only, not build/device-verified) — see
+`docs/AGENT_PROGRESS.md`, "Bonus fix found while wiring Bug 2/3." `isCapturing`
+is now set to `true` only inside `mediaProjectionLauncher`'s `RESULT_OK`
+branch, and a denial shows a real `captureDeniedMessage` instead of a stuck
+"active" UI.
 
-In `MainActivity.kt`:
+Original diagnosis (pre-fix), kept for the record. In `MainActivity.kt`:
 
 ```kotlin
 onStartCapture = { requestScreenCapture(); isCapturing = true },
@@ -87,6 +110,28 @@ actual capture running.
 the `mediaProjectionLauncher` callback's `RESULT_OK` branch, and add an
 explicit UI path for "user denied the system consent dialog" (distinct from
 the app's own overlay-permission explanation).
+
+### 3b. Signing-certificate instability caused "update crashes" and language selection was entirely non-functional
+
+**Status:** both FIXED (code review only, not build/device-verified). These
+were not caught in the original review pass below and were reported
+separately by the user after real-world testing; full root-cause analysis
+is in `docs/AGENT_PROGRESS.md` ("Bug 1" and "Bug 2" entries). Summary:
+
+- No `signingConfigs` existed, so every CI-built debug APK was signed with a
+  different, randomly-generated certificate, and Android refuses to install
+  an update whose certificate doesn't match the installed app. Fixed with a
+  committed shared debug keystore.
+- Language selection in `HomeScreen.kt` was two hardcoded, non-interactive
+  `Text` labels — there was no picker UI, no persistence, and no connection
+  to the OCR engine's actually-correct per-script recognizers. Fixed with
+  `SupportedLanguages.kt` + `PreferencesRepository.kt` + clickable pickers.
+- The overlay-permission return flow's launcher callback was a no-op, so
+  returning from system settings never auto-advanced to the screen-capture
+  consent step. Fixed in `MainActivity.kt`.
+- The floating bubble was an oversized, non-state-aware, non-interactive
+  circle. Redesigned (48dp, state-aware, with a real result panel) as part
+  of the Bug 5/6 wiring work, since it shares a file with the result display.
 
 ## Medium priority
 

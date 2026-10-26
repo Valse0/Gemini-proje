@@ -17,8 +17,19 @@ import android.media.projection.MediaProjectionManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import com.luma.translate.MainActivity
+import com.luma.translate.ocr.OcrManager
+import com.luma.translate.pipeline.PipelineResult
+import com.luma.translate.pipeline.TranslationPipeline
+import com.luma.translate.translation.SupportedLanguages
 import com.luma.translate.ui.overlay.FloatingOverlayManager
+import com.luma.translate.ui.overlay.OverlayUiState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Foreground Service managing Android MediaProjection screen capture.
@@ -37,6 +48,12 @@ class CaptureService : Service() {
         const val EXTRA_WIDTH = "extra_width"
         const val EXTRA_HEIGHT = "extra_height"
         const val EXTRA_DPI = "extra_dpi"
+        // Bug 2/5/6: previously MainActivity had nowhere to tell the service
+        // which language pair the user picked, so the pipeline (once it
+        // existed) would have had no way to honor the on-screen selection.
+        const val EXTRA_SOURCE_LANGUAGE = "extra_source_language"
+        const val EXTRA_TARGET_LANGUAGE = "extra_target_language"
+        private const val TAG = "CaptureService"
     }
 
     private val binder = LocalBinder()
@@ -45,6 +62,22 @@ class CaptureService : Service() {
     private var imageReader: ImageReader? = null
     private var isCapturing = false
     private var overlayManager: FloatingOverlayManager? = null
+
+    private var sourceLanguage: String = SupportedLanguages.DEFAULT_SOURCE_CODE
+    private var targetLanguage: String = SupportedLanguages.DEFAULT_TARGET_CODE
+
+    // Bug 5/6: the end-to-end pipeline that was previously never
+    // instantiated anywhere in the app. OCR stays strictly on-device
+    // (OcrManager, ML Kit); only recognized text + language codes go to the
+    // backend (TranslationPipeline), per docs/PRIVACY.md.
+    private val ocrManager = OcrManager()
+    private val translationPipeline = TranslationPipeline(ocrManager)
+
+    // Service-scoped coroutine scope for the pipeline's async work. Tied to
+    // the service's own lifecycle (cancelled in stopCapture()/onDestroy()),
+    // never leaked past a capture session.
+    private var serviceJob: Job? = null
+    private var serviceScope: CoroutineScope? = null
 
     inner class LocalBinder : Binder() {
         fun getService(): CaptureService = this@CaptureService
@@ -65,6 +98,10 @@ class CaptureService : Service() {
                 val width = intent.getIntExtra(EXTRA_WIDTH, 1080)
                 val height = intent.getIntExtra(EXTRA_HEIGHT, 1920)
                 val dpi = intent.getIntExtra(EXTRA_DPI, 400)
+                sourceLanguage = intent.getStringExtra(EXTRA_SOURCE_LANGUAGE)
+                    ?: SupportedLanguages.DEFAULT_SOURCE_CODE
+                targetLanguage = intent.getStringExtra(EXTRA_TARGET_LANGUAGE)
+                    ?: SupportedLanguages.DEFAULT_TARGET_CODE
 
                 if (resultData != null) {
                     startForegroundWithNotification()
@@ -160,13 +197,77 @@ class CaptureService : Service() {
             null
         )
         
+        val job = SupervisorJob()
+        serviceJob = job
+        serviceScope = CoroutineScope(Dispatchers.Main.immediate + job)
+
         overlayManager = FloatingOverlayManager(this) {
-            val bitmap = captureCurrentFrame()
-            // To be implemented: trigger OCR and translation flow
+            runTranslationCycle()
         }
         overlayManager?.show()
-        
+
         isCapturing = true
+    }
+
+    /**
+     * Bug 5/6 fix: this is what the bubble tap now actually does -
+     * previously `captureCurrentFrame()` was called and its result
+     * discarded, so tapping the bubble had no observable effect at all,
+     * which is exactly what was reported ("bubble tap does nothing" /
+     * "app never translates anything").
+     *
+     * Full chain: grab the latest frame from the already-running
+     * MediaProjection capture -> on-device ML Kit OCR
+     * (translationPipeline/ocrManager) -> backend translation call -> real
+     * result (or a real, specific error) shown in the overlay. No fake
+     * success state is ever shown: every branch below reflects an actual
+     * outcome of the pipeline.
+     */
+    private fun runTranslationCycle() {
+        val manager = overlayManager ?: return
+        val scope = serviceScope ?: return
+
+        val bitmap = captureCurrentFrame()
+        if (bitmap == null) {
+            manager.updateState(
+                OverlayUiState.Error("Couldn't capture the screen. Try again in a moment.")
+            )
+            return
+        }
+
+        manager.updateState(OverlayUiState.Processing)
+
+        scope.launch {
+            val result = try {
+                translationPipeline.execute(
+                    bitmap = bitmap,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Translation pipeline threw unexpectedly", e)
+                PipelineResult.GeneralError(e)
+            }
+
+            // The overlay may have been torn down (stopCapture) while the
+            // network/OCR work above was in flight; guard against updating
+            // a manager instance that's no longer attached to a window.
+            if (overlayManager !== manager) return@launch
+
+            when (result) {
+                is PipelineResult.Success -> manager.updateState(OverlayUiState.Success(result.regions))
+                is PipelineResult.EmptyOcr -> manager.updateState(OverlayUiState.EmptyResult)
+                is PipelineResult.NetworkError -> manager.updateState(
+                    OverlayUiState.Error("Couldn't reach the translation backend: ${result.message}")
+                )
+                is PipelineResult.GeneralError -> manager.updateState(
+                    OverlayUiState.Error(
+                        result.error.message?.let { "Translation failed: $it" }
+                            ?: "Translation failed unexpectedly."
+                    )
+                )
+            }
+        }
     }
 
     fun captureCurrentFrame(): Bitmap? {
@@ -196,6 +297,10 @@ class CaptureService : Service() {
         if (!isCapturing) return
         isCapturing = false
 
+        serviceJob?.cancel()
+        serviceJob = null
+        serviceScope = null
+
         overlayManager?.remove()
         overlayManager = null
 
@@ -207,6 +312,8 @@ class CaptureService : Service() {
 
         mediaProjection?.stop()
         mediaProjection = null
+
+        ocrManager.release()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
     }

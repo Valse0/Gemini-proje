@@ -3,6 +3,8 @@ package com.luma.translate.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -14,31 +16,55 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.luma.translate.translation.SupportedLanguages
 import com.luma.translate.ui.theme.ElectricBlue
 import com.luma.translate.ui.theme.EmeraldGreen
 import com.luma.translate.ui.theme.Slate800
 import com.luma.translate.ui.theme.Slate900
 
-enum class SessionState {
-    IDLE,
-    REQUESTING_PERMISSION,
-    ACTIVE_OVERLAY,
-    TRANSLATING
-}
+private enum class LanguagePickerTarget { SOURCE, TARGET, NONE }
 
 @Composable
 fun HomeScreen(
     isOverlayPermissionGranted: Boolean,
+    sourceLanguageCode: String,
+    targetLanguageCode: String,
+    onSourceLanguageSelected: (String) -> Unit,
+    onTargetLanguageSelected: (String) -> Unit,
+    isCapturing: Boolean,
+    captureDeniedMessage: String?,
     onRequestOverlayPermission: () -> Unit,
     onStartCapture: () -> Unit,
     onStopCapture: () -> Unit,
     onOpenPrivacyInfo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var sourceLanguage by remember { mutableStateOf("Japanese (ja)") }
-    var targetLanguage by remember { mutableStateOf("English (en)") }
-    var sessionState by remember { mutableStateOf(SessionState.IDLE) }
-    var selectedContext by remember { mutableStateOf("General") }
+    var pickerTarget by remember { mutableStateOf(LanguagePickerTarget.NONE) }
+
+    val sourceLanguage = SupportedLanguages.sourceLanguageOrDefault(sourceLanguageCode)
+    val targetLanguage = SupportedLanguages.targetLanguageOrDefault(targetLanguageCode)
+
+    if (pickerTarget != LanguagePickerTarget.NONE) {
+        LanguagePickerDialog(
+            title = if (pickerTarget == LanguagePickerTarget.SOURCE) "Translate from" else "Translate to",
+            options = if (pickerTarget == LanguagePickerTarget.SOURCE) {
+                SupportedLanguages.SOURCE_LANGUAGES
+            } else {
+                SupportedLanguages.TARGET_LANGUAGES
+            },
+            selectedCode = if (pickerTarget == LanguagePickerTarget.SOURCE) sourceLanguageCode else targetLanguageCode,
+            onSelect = { code ->
+                if (pickerTarget == LanguagePickerTarget.SOURCE) {
+                    onSourceLanguageSelected(code)
+                } else {
+                    onTargetLanguageSelected(code)
+                }
+                pickerTarget = LanguagePickerTarget.NONE
+            },
+            onDismiss = { pickerTarget = LanguagePickerTarget.NONE }
+        )
+    }
 
     Column(
         modifier = modifier
@@ -97,16 +123,16 @@ fun HomeScreen(
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(if (sessionState == SessionState.ACTIVE_OVERLAY) EmeraldGreen else Color.Gray)
+                            .background(if (isCapturing) EmeraldGreen else Color.Gray)
                     )
                     Column {
                         Text(
-                            text = if (sessionState == SessionState.ACTIVE_OVERLAY) "Overlay Session Active" else "Ready to Translate",
+                            text = if (isCapturing) "Overlay Session Active" else "Ready to Translate",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = if (sessionState == SessionState.ACTIVE_OVERLAY) "Tap floating button on any app to translate" else "Start session to enable screen translation",
+                            text = if (isCapturing) "Tap floating button on any app to translate" else "Start session to enable screen translation",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.Gray
                         )
@@ -138,10 +164,13 @@ fun HomeScreen(
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.background,
-                            modifier = Modifier.weight(1f).padding(end = 6.dp)
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 6.dp)
+                                .clickable { pickerTarget = LanguagePickerTarget.SOURCE }
                         ) {
                             Text(
-                                text = sourceLanguage,
+                                text = sourceLanguage.displayName,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.padding(12.dp)
@@ -151,10 +180,13 @@ fun HomeScreen(
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.background,
-                            modifier = Modifier.weight(1f).padding(start = 6.dp)
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 6.dp)
+                                .clickable { pickerTarget = LanguagePickerTarget.TARGET }
                         ) {
                             Text(
-                                text = targetLanguage,
+                                text = targetLanguage.displayName,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.padding(12.dp)
@@ -170,18 +202,23 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // Bug 5/6 note: this button's only job is to get the user into an
+            // active overlay session (permission -> capture consent -> the
+            // floating bubble appears). The actual translation action lives
+            // on the bubble itself once the session is active - this button
+            // does not perform a fake translation and does not optimistically
+            // flip state before the real permission/consent results return;
+            // `isCapturing` is owned by MainActivity and only becomes true
+            // once CaptureService has actually started (see Bug 6 fix notes
+            // in docs/AGENT_PROGRESS.md).
             Button(
                 onClick = {
                     if (!isOverlayPermissionGranted) {
                         onRequestOverlayPermission()
+                    } else if (isCapturing) {
+                        onStopCapture()
                     } else {
-                        if (sessionState == SessionState.ACTIVE_OVERLAY) {
-                            onStopCapture()
-                            sessionState = SessionState.IDLE
-                        } else {
-                            onStartCapture()
-                            sessionState = SessionState.ACTIVE_OVERLAY
-                        }
+                        onStartCapture()
                     }
                 },
                 modifier = Modifier
@@ -189,18 +226,33 @@ fun HomeScreen(
                     .height(52.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (sessionState == SessionState.ACTIVE_OVERLAY) Slate800 else ElectricBlue
+                    containerColor = if (isCapturing) Slate800 else ElectricBlue
                 )
             ) {
                 Text(
                     text = when {
                         !isOverlayPermissionGranted -> "Grant Overlay Permission"
-                        sessionState == SessionState.ACTIVE_OVERLAY -> "Stop Overlay Session"
+                        isCapturing -> "Stop Overlay Session"
                         else -> "Start Floating Overlay Session"
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+
+            if (captureDeniedMessage != null) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Text(
+                        text = captureDeniedMessage,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
             }
 
             TextButton(
@@ -212,6 +264,75 @@ fun HomeScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.Gray
                 )
+            }
+        }
+    }
+}
+
+/**
+ * A small, native-feeling language picker. The list is short (4 source /
+ * 3 target languages today), so a single scrollable list is "otherwise
+ * easy-to-use" per the Bug 2 requirement without the overhead of a search
+ * field that a list this size doesn't need.
+ */
+@Composable
+private fun LanguagePickerDialog(
+    title: String,
+    options: List<SupportedLanguages.Language>,
+    selectedCode: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 4.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                )
+                LazyColumn {
+                    items(options) { language ->
+                        val isSelected = language.code == selectedCode
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(language.code) }
+                                .padding(horizontal = 20.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = language.displayName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (isSelected) ElectricBlue else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = language.nativeName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                            }
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(ElectricBlue)
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(4.dp))
             }
         }
     }

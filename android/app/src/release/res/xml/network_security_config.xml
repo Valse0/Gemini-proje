@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release-build network security config: intentionally the platform
+  default (no cleartext traffic permitted anywhere). This file exists only
+  because AndroidManifest.xml references `@xml/network_security_config`
+  unconditionally, and Gradle's per-build-type resource merging requires a
+  same-named resource in every variant that's built. The debug variant's
+  counterpart (src/debug/res/xml/network_security_config.xml) is the one
+  that actually relaxes anything, and only for local dev hosts.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

@@ -81,8 +81,9 @@ jobs:
       # on the next step didn't correspond to anything Gradle actually read
       # (no `shouldSign` property existed anywhere in the build scripts), so
       # it has been removed rather than kept as dead configuration.
+    
       - name: Decode release signing key (if configured)
-        if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.RELEASE_KEYSTORE_BASE64 != '' }}
         working-directory: android
         run: echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > app/release.keystore
         env:

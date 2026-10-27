@@ -34,6 +34,66 @@ The backend must have:
 
 Do not launch an unrestricted paid translation endpoint.
 
+## 3b. Debug signing identity and update compatibility (read before installing a new debug build on a device that already has one)
+
+A committed, shared `android/app/debug.keystore` pins every debug build —
+local or CI — to one stable signing identity (`storePassword`/`keyPassword`
+= `android`, `keyAlias` = `androiddebugkey`, the same conventional
+placeholder credentials Android's own implicit default debug config uses).
+This guarantees that **from the point this keystore was introduced onward**,
+every new debug build can be installed directly over the previous one
+without uninstalling first — that is the whole point of the fix (see
+`docs/AGENT_PROGRESS.md`, Bug 1).
+
+**What this does NOT do:** retroactively match whatever certificate is
+currently on a device that already has an older debug build installed.
+Before this fix, the project had no explicit `signingConfigs`, so every CI
+run signed its debug APK with a different, randomly auto-generated
+certificate that was never saved anywhere — it existed only in that one
+GitHub Actions runner's ephemeral filesystem and was discarded when the
+runner was torn down. There is no way to recover or reconstruct it. If a
+build signed with this newly-committed `debug.keystore` is installed over
+an existing installation signed with one of those old, lost, random
+certificates, Android will still refuse the install
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) **once**, and the device will need
+its current Luma Translate (debug) install removed manually that one time.
+Every install after that — as long as `android/app/debug.keystore` stays
+committed and unchanged — will update cleanly in place.
+
+Do not reinterpret this as "the fix didn't work." It is a one-time,
+unavoidable consequence of the previous certificate having been randomly
+generated and never persisted; it is not a sign that the new, pinned
+keystore is itself unstable.
+
+The application ID for debug builds is `com.luma.translate.debug`
+(`applicationIdSuffix = ".debug"` in `android/app/build.gradle.kts`, unchanged
+by this pass) — distinct from the release application ID,
+`com.luma.translate`. Both continue to use the same package name as before;
+neither was changed by this fix.
+
+**To check in advance whether a given device will need that one-time
+reinstall:** compare the committed keystore's certificate against whatever
+is currently installed.
+
+```
+# This repository's committed debug.keystore (fixed, will not change
+# unless the file itself is replaced):
+keytool -list -v -keystore android/app/debug.keystore -storepass android
+#  SHA256: CE:C4:AE:DE:E8:DA:20:D7:D2:83:FC:8A:AF:C7:DD:FB:18:EF:84:5A:E6:F4:6D:10:43:6D:04:D5:7E:88:1E:C6
+
+# The certificate actually signing the APK currently on a device (requires
+# adb and the app's APK pulled from the device, or `apksigner verify
+# --print-certs` on a copy of the installed APK):
+adb shell pm path com.luma.translate.debug
+adb pull <path-from-above> /tmp/installed.apk
+apksigner verify --print-certs /tmp/installed.apk
+```
+
+If the SHA256 fingerprints differ, the next install from this repository
+will require removing the existing app first (one time only, per the
+explanation above). If they already match, it will update in place
+immediately.
+
 ## 4. Android release build
 
 From `android/`:

@@ -1,197 +1,209 @@
 # Session Handoff — Luma Translate 🍋‍🟩
 
-**Last updated:** this session, during the "Critical Bug Fixes & Premium
-Product Upgrade" pass, immediately after implementing Bug 4/5/6.
+**Last updated:** end of the "Full Project Repair, Build Stabilization &
+Premium UI Audit" pass.
 
 **Purpose:** if this session is interrupted (usage limit, new session,
 different agent), read this file first, then `git status` / `git diff` in
-the working copy, before doing anything else. Do not restart from scratch
-or re-diagnose bugs already diagnosed below — see also the more detailed,
-append-only `docs/AGENT_PROGRESS.md` findings log.
+the working copy, before doing anything else. Do not restart from scratch,
+re-diagnose bugs already diagnosed below, or re-run network/build checks
+whose result is already recorded here as a stable environmental fact — see
+also the more detailed, append-only `docs/AGENT_PROGRESS.md` findings log
+(this session's entry is titled "Full Project Repair, Build Stabilization &
+Premium UI Audit", near the bottom).
 
 **Working copy:** `/home/claude/valse0/gemini-proje`
 (`https://github.com/Valse0/gemini-proje`). **Nothing has been pushed to
-GitHub this session or committed locally** — per the user's explicit,
-repeated instruction ("Do not push to GitHub, deploy, or perform external
-actions unless I explicitly request them"), everything below is an
-uncommitted working-tree change only. `git status --short` currently shows
-the full list of modified/added/untracked files (reproduced at the bottom
-of this file for reference).
+GitHub, committed, or deployed this session** — per the user's explicit,
+repeated instruction, everything below is an uncommitted working-tree
+change only. `git status --short` is reproduced at the bottom of this file.
 
-## Environment constraint (stable across every session so far)
+## Environment constraint (stable across every session so far — re-confirmed again this session)
 
 This sandbox has **no network access** to the Android SDK, Google/Maven
-Central, the Gradle Plugin Portal, or the npm registry. Re-confirmed this
-session: `./gradlew :app:compileDebugKotlin --offline` (both via the
-wrapper and the preinstalled system Gradle at `/opt/gradle-8.14.3`) fails
-immediately because AGP 8.4.2 cannot be resolved offline. **No Android
-build has ever been run in this environment, by this or any prior pass.**
-Every Kotlin/Gradle change is a careful manual code review, not a
-compiled/tested change, unless explicitly stated otherwise. `keytool`
-(bundled with the JDK) is the one Android-adjacent tool that does work
-offline, and was used to generate `android/app/debug.keystore`.
+Central, the Gradle Plugin Portal, or the npm registry. Re-confirmed again
+this session via three independent checks: `curl` to `dl.google.com` /
+`repo.maven.apache.org` (both `CONNECT tunnel failed, response 403` through
+the agent proxy), `/opt/gradle-8.14.3/bin/gradle :app:compileDebugKotlin
+--offline` (fails at AGP plugin resolution, not even reaching Kotlin
+compilation), and `npm install` in `server/` (fails with `ENOTFOUND
+registry.npmjs.org` on every package). **No Android build and no backend
+test run has ever succeeded in this environment, in this or any prior
+session.** Every Kotlin/Gradle/workflow change is a careful manual review,
+not a compiled/tested change, unless explicitly stated otherwise. `keytool`
+(bundled with the JDK) is the one tool in this category that does work
+offline.
 
-## What is DONE this session (bugs 1–6 of the user's 6-bug list)
+## What this session did (continuing from the prior "Critical Bug Fixes"
+session, which had already fixed the original 6 reported bugs)
 
-All six reported bugs have been diagnosed and have code-level fixes in the
-working tree. None have been build- or device-verified (see constraint
-above) — treat every item below as "implemented, pending real verification."
+The user reported two new, specific Kotlin compile errors and asked for a
+full build-pipeline audit, update-compatibility verification, and a UI
+polish pass. All of the following is implemented in the working tree; build
+verification remains blocked by the sandbox constraint above.
 
-1. **Update/upgrade crash** — fixed. Root cause: no `signingConfigs` →
-   every CI build got a random debug cert → `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
-   Fix: committed shared `android/app/debug.keystore` + `signingConfigs.sharedDebug`;
-   `versionCode` fallback changed from hardcoded `1` to minutes-since-epoch.
-2. **Language selection** — implemented. New `SupportedLanguages.kt` (4
-   source / 3 target languages) + `PreferencesRepository.kt`
-   (SharedPreferences persistence) + clickable language pickers in
-   `HomeScreen.kt`, wired through `MainActivity.kt`. Deliberately did NOT
-   add a fake "Auto-detect" option (ML Kit recognizers are script-specific,
-   not language-detecting).
-3. **Overlay permission return flow** — fixed. `MainActivity.kt`'s
-   `overlayPermissionLauncher` callback now actually re-checks permission
-   and auto-continues to screen-capture consent, gated by an
-   `awaitingOverlayPermissionResult` flag so it never fires on an ordinary
-   app resume.
-4. **Bubble redesign** — implemented. `FloatingOverlayManager.kt` rewritten:
-   48dp tonal surface (was a 56dp bright-blue "LUMA" circle), state-aware
-   color/glyph (idle/processing/success/error/empty), no new dependency
-   added for animation.
-5. **Bubble tap does nothing** — fixed. `CaptureService.kt`'s
-   `FloatingOverlayManager(this) { ... }` trigger lambda now calls a real
-   `runTranslationCycle()` instead of discarding the captured bitmap.
-6. **App never translates anything** — fixed, with **three independent
-   root causes found and addressed**:
-   - The pipeline was never instantiated at all (same root cause as #5) —
-     fixed by wiring `OcrManager` + `TranslationPipeline` into
-     `CaptureService`.
-   - No Android Network Security Config existed, so cleartext HTTP to the
-     dev backend would be blocked outright on API 28+ — fixed with
-     per-build-type `network_security_config.xml` + manifest wiring.
-   - The backend URL was hardcoded to the emulator-only
-     `http://10.0.2.2:3000` with no override — fixed via
-     `BuildConfig.BACKEND_BASE_URL` (configurable via `-PLUMA_BACKEND_URL`
-     or `android/local.properties`).
+1. **Root-caused and fixed both reported Kotlin errors with a single
+   one-line change.** `SupportedLanguages.kt` had a stray literal `/*`
+   inside its own KDoc comment's prose (in a file-path reference,
+   `` server/src/services/*-provider.ts ``). Because Kotlin block comments
+   nest, that opened a second comment that swallowed the real one's closing
+   `*/`, leaving the entire rest of the file — including the `Language`
+   class — inside one giant unclosed comment through EOF. The reported
+   `HomeScreen.kt:319 unresolved reference: nativeName` was a **downstream
+   symptom** of that, not a separate bug — `language.nativeName` was
+   already correct code. Fixed by rewording the one line to remove the
+   literal `/*` sequence; verified no other `.kt` file in the project has
+   the same `/*`/`*/` imbalance (scanned all of them).
+2. **Audited and repaired `.github/workflows/build-apk.yml`:** bumped four
+   stale action versions to current majors (`actions/checkout` v4→v7,
+   `actions/setup-java` v4→v6, `gradle/actions/setup-gradle` v3→v6,
+   `actions/upload-artifact` v4→v7, all four uses), after confirming the
+   `with:` inputs this workflow uses are still valid in each new major;
+   made the two `tee`-piped build steps' failure propagation explicit
+   (`set -euo pipefail`, defense-in-depth alongside GitHub's own default);
+   added a new, independent "Verify debug APK was actually produced" step
+   so a silently-missing APK fails the job immediately with a clear
+   message, not just much later at the upload step. YAML syntax validated
+   with a Python `yaml.safe_load` parse (12 steps, parses cleanly).
+3. **Verified Gradle wrapper integrity** (`gradle-wrapper.jar` is a valid
+   zip with 34 entries, `gradle-wrapper.properties` points at Gradle 8.6 —
+   compatible with AGP 8.4.2 / Kotlin 2.0.0, both unchanged) and confirmed
+   `android/app/build.gradle.kts` is internally consistent (signing
+   configs, `BuildConfig.BACKEND_BASE_URL`, `local.properties` loader all
+   reviewed, no syntax issues found).
+4. **Verified signing/update-compatibility** without changing
+   `applicationId`, package name, or signing arrangement: confirmed
+   `com.luma.translate` (release) / `com.luma.translate.debug` (debug,
+   via `applicationIdSuffix`) are consistent across `build.gradle.kts` and
+   the manifest (no legacy `package=` override); confirmed
+   `android/app/debug.keystore` is intact via `keytool -list -v`
+   (PKCS12, alias `androiddebugkey`, SHA256
+   `CE:C4:AE:DE:E8:DA:20:D7:D2:83:FC:8A:AF:C7:DD:FB:18:EF:84:5A:E6:F4:6D:10:43:6D:04:D5:7E:88:1E:C6`).
+   **Important limitation, now explicitly documented in `docs/RELEASE.md`
+   §3b:** this keystore is new (generated in a prior session's Bug 1 fix)
+   and is *not* the same certificate that signed whatever build is
+   currently on the user's phone (that one was random/ephemeral and is
+   unrecoverable). The very next install from this repository may still
+   need one manual uninstall of the currently-installed app; every install
+   after that will update in place, since the keystore is now fixed and
+   committed. `docs/RELEASE.md` §3b has the exact `keytool`/`adb`/
+   `apksigner` commands to check a specific device in advance.
+5. **UI audit:** reviewed `HomeScreen.kt`, `PrivacySection.kt`,
+   `FloatingOverlayManager.kt` (already redesigned in the prior session —
+   not re-touched structurally this pass), `MainActivity.kt`'s `Scaffold`/
+   inset handling, and the theme tokens. Found and fixed two concrete,
+   scoped issues rather than rewriting the UI broadly:
+   - `HomeScreen.kt` was not explaining *why* overlay permission is needed
+     before sending the user to system settings (an explicit AGENTS.md
+     rule). Added a short, specific explanation shown only while the
+     permission is missing.
+   - `PrivacySection.kt`'s content `Column` was not scrollable, risking
+     content/button overflow on small screens or larger system font
+     scales. Wrapped it in `Modifier.verticalScroll(rememberScrollState())`.
+6. **Backend:** attempted `npm install` in `server/` to run its tests —
+   blocked by the npm registry DNS failure above. No backend source was
+   changed this session.
+7. **Secrets/diff review:** scanned the full diff and all new files for
+   secret-shaped strings (API keys, private key headers, AWS-style keys) —
+   none found. No files were accidentally deleted; `git diff --stat` shows
+   only additions/modifications across 12 tracked files plus the expected
+   untracked new files.
+8. Updated `docs/KNOWN_ISSUES.md` and `docs/RELEASE.md`; appended a full
+   findings entry to `docs/AGENT_PROGRESS.md`; rewrote this file.
 
-Full reasoning, code excerpts, and verification caveats for every item
-above are in `docs/AGENT_PROGRESS.md` (append-only findings log — read that
-file for the "why", this file for the "what's left").
+## Files changed/added this session (on top of everything from the prior "Critical Bug Fixes" session, which is unchanged)
 
-## Files changed/added this session (on top of the previous pass's
-Professional Product Transformation changes, which were already in the
-working tree / already on `origin/main` per last session's sync)
+Modified this session:
+- `android/app/src/main/java/com/luma/translate/translation/SupportedLanguages.kt` (the one-line comment fix — root cause of both reported errors)
+- `.github/workflows/build-apk.yml` (action version bumps, explicit pipefail, new APK-existence check)
+- `android/app/src/main/java/com/luma/translate/ui/home/HomeScreen.kt` (overlay-permission explanation text)
+- `android/app/src/main/java/com/luma/translate/ui/privacy/PrivacySection.kt` (made scrollable)
+- `docs/KNOWN_ISSUES.md`, `docs/RELEASE.md`, `docs/AGENT_PROGRESS.md`, `docs/SESSION_HANDOFF.md` (this file)
 
-Modified:
-- `android/app/build.gradle.kts` (signing configs, versionCode, BuildConfig/backend URL)
-- `android/app/src/main/AndroidManifest.xml` (networkSecurityConfig attribute)
-- `android/app/src/main/java/com/luma/translate/MainActivity.kt` (language state, permission-flow fix, capture-state fix, passes language extras to CaptureService)
-- `android/app/src/main/java/com/luma/translate/capture/CaptureService.kt` (pipeline wiring, language extras, coroutine scope)
-- `android/app/src/main/java/com/luma/translate/pipeline/TranslationPipeline.kt` (BuildConfig-sourced backend URL)
-- `android/app/src/main/java/com/luma/translate/ui/home/HomeScreen.kt` (language pickers, removed duplicate SessionState enum, capture-state/error UI)
-- `android/app/src/main/java/com/luma/translate/ui/overlay/FloatingOverlayManager.kt` (full rewrite: state-aware bubble + result panel)
-- `.gitignore` (exception for the committed debug keystore)
-- `.github/workflows/build-apk.yml` (release signing wiring, from Bug 1 fix)
-
-New:
-- `android/app/debug.keystore` (committed, not a secret — see AGENT_PROGRESS.md)
-- `android/app/src/main/java/com/luma/translate/translation/SupportedLanguages.kt`
-- `android/app/src/main/java/com/luma/translate/data/PreferencesRepository.kt`
-- `android/app/src/debug/res/xml/network_security_config.xml`
-- `android/app/src/release/res/xml/network_security_config.xml`
-- `docs/AGENT_PROGRESS.md` (findings log, continuity file — see this session's updates at the bottom)
-- `docs/SESSION_HANDOFF.md` (this file)
-
-Also present from the earlier "Professional Product Transformation" pass
-(already in the working tree before this session started — not re-done):
-`CHANGELOG.md`, `docs/KNOWN_ISSUES.md`, `docs/VERIFICATION_REPORT.md`,
-rewrites of `AGENTS.md`/`GEMINI.md`/`README.md`/`docs/ARCHITECTURE.md`/
-`docs/PRIVACY.md`/`docs/RELEASE.md`/`docs/ROADMAP.md`/`docs/SECURITY.md`/
-`docs/TESTING.md`, `package.json` rename, `package-lock.json` /
-`server/package-lock.json` (restored from `origin/main`).
+Everything else in `git status` below was already in the working tree from
+the prior session (signing config, language selection, overlay-permission
+flow, bubble redesign, end-to-end pipeline wiring, network security config)
+and was reviewed but not modified further this session — see
+`docs/AGENT_PROGRESS.md`'s earlier entries for that work.
 
 ## Commands run this session and their results
 
-- `./gradlew :app:compileDebugKotlin --offline` (wrapper) → fails: proxy
-  returns 403 trying to download the Gradle 8.6 distribution itself (not
-  even an AGP/dependency issue — the wrapper's pinned Gradle version isn't
-  the preinstalled one).
-- `/opt/gradle-8.14.3/bin/gradle :app:compileDebugKotlin --offline` (system
-  Gradle, avoids the wrapper-download step) → gets further, but fails at
-  plugin resolution: `Plugin [id: 'com.android.application', version:
-  '8.4.2'] was not found` — no cached/offline copy of AGP exists in this
-  sandbox. **No Kotlin source file in this project has ever actually been
-  compiled in this environment.**
-- No other build/test commands were run this session (none are runnable
-  given the above).
+- `curl` to `dl.google.com`, `repo.maven.apache.org` → `CONNECT tunnel
+  failed, response 403` (agent proxy rejects both hosts).
+- `/opt/gradle-8.14.3/bin/gradle :app:compileDebugKotlin --offline` (run
+  twice: once before the comment fix, once after) → both times fails at
+  the same point: `Plugin [id: 'com.android.application', version:
+  '8.4.2', apply: false] was not found` — never reaches Kotlin compilation,
+  so the comment fix itself could not be confirmed by an actual compiler
+  in this environment (confirmed instead by the full-tree `/*`/`*/`
+  balance scan and a careful manual re-read).
+- `npm install` in `server/` → fails, `ENOTFOUND registry.npmjs.org` on
+  every dependency; no `node_modules/` exists, no backend test could run.
+- `python3 -c "import yaml; yaml.safe_load(...)"` on the rewritten workflow
+  → parses cleanly, 12 steps.
+- `grep` across the repo for secret-shaped strings (API keys, private key
+  headers) → none found.
+- `keytool -list -v -keystore android/app/debug.keystore` → valid,
+  confirms the committed keystore's fingerprint (see above).
 
 ## Build/test status
 
-- **Not built.** Not even attempted to the point of Kotlin compilation —
-  Gradle cannot resolve AGP offline in this sandbox (see above).
-- No unit tests were run (same reason — `./gradlew test` would hit the same
-  plugin-resolution failure).
-- No device/emulator testing has been performed, because no device/emulator
-  is available in this environment.
-- Backend (`server/`) was not touched this session, and was not re-tested
-  (no changes made to it in this pass).
+- **Still not built.** Same sandbox constraint as every prior session —
+  AGP cannot be resolved offline, so Gradle never reaches Kotlin
+  compilation. This is the single most important thing for the user (or
+  an agent with real network/device access) to do next.
+- No Android unit tests were run (same blocker).
+- No backend tests were run (npm registry unreachable).
+- No device/emulator testing has been performed (none available here).
 
 ## Known blockers
 
-1. **No Android SDK / no network egress to Google/Maven/Gradle Plugin
-   Portal in this sandbox.** This blocks all Android building, and is the
-   same blocker reported in every previous pass — not something to keep
-   re-investigating; treat it as a stable environmental fact unless a
-   future session reports differently.
-2. Every fix in this session is therefore unverified beyond careful manual
-   code reading. The single highest-value next action for a human (or an
-   agent with real build/device access) is: pull this working tree, run
-   `./gradlew assembleDebug` on a machine with normal network access, and
-   install/test on a real device or emulator, specifically exercising:
-   - Install → update-in-place (not reinstall) across two builds (Bug 1).
-   - Picking each source/target language and confirming OCR actually uses
-     the selected language, not just that the UI shows a selection (Bug 2).
-   - Granting overlay permission via the system settings screen and
-     confirming the app auto-continues to the screen-capture prompt without
-     a second manual tap (Bug 3).
-   - Visual check of the new bubble against a few different home-screen/app
-     backgrounds, especially at screen edges and in both orientations (Bug 4).
-   - Tapping the bubble over real on-screen text with a reachable backend
-     (local dev server, `LUMA_BACKEND_URL` pointed at it) and confirming an
-     actual translated result renders in the result panel, not just that
-     the bubble changes color (Bug 5/6) — then also testing with the
-     backend unreachable, to confirm the error state shows a real message
-     rather than hanging or showing a fake success.
-3. The backend's own build/tests (`server/`) have not been re-verified this
-   session; the previous pass's `docs/VERIFICATION_REPORT.md` has the last
-   known status for that.
+1. **No Android SDK / no Maven/Gradle Plugin Portal / no npm registry
+   access in this sandbox.** Stable across every session; stop
+   re-investigating this specific fact unless a future session's checks
+   actually come back different.
+2. Every change in this project — across this session and all prior ones
+   — is therefore unverified beyond careful manual code reading. **The
+   highest-value next action is: on a machine with normal network access,
+   pull this working tree, run `./gradlew assembleDebug`, and confirm it
+   actually produces `android/app/build/outputs/apk/debug/*.apk`.** Then
+   push to trigger the repaired GitHub Actions workflow and confirm it
+   goes green end-to-end (checkout → SDK verify → Gradle build → APK-exists
+   check → artifact upload) for the first time since run #21's failure.
+3. On a real device: install the resulting debug APK. If an older debug
+   build is already installed, expect one required uninstall (see §4 above
+   and `docs/RELEASE.md` §3b) — after that, confirm the *next* build
+   installs over it without uninstalling, confirm each bug-fix from the
+   prior session's work (language selection actually changes OCR behavior,
+   overlay-permission flow auto-continues, the bubble tap produces a real
+   translation with a reachable backend), and confirm the two UI changes
+   from this session (permission explanation text, privacy sheet scrolling
+   on a small/large-font device).
+4. Bug 7 (APK size review) from the prior session's task list remains
+   unstarted — out of scope for this session's brief, which did not
+   mention it as a priority.
 
 ## Generated artifacts
 
-None produced yet this session (no ZIP). The only ZIP delivered so far is
-from the earlier "Professional Product Transformation" pass and does
-**not** contain any of this session's Bug 1–6 fixes.
+A fresh ZIP of the full working tree (containing everything from both this
+session and the prior "Critical Bug Fixes" session) is produced and
+delivered at the end of this pass — see the chat message for its exact
+delivery; this file does not track a path since the ZIP is built fresh in
+the session's scratch directory, not committed to the repository.
 
 ## Exact next step if work resumes
 
-1. Package a fresh ZIP of the current working tree (excluding
-   `node_modules`, `.git`, build outputs) and deliver it via SendUserFile —
-   this has not been done yet this session and the user has asked for a
-   "latest ZIP" deliverable.
-2. Move to **Bug 7 (APK size review)** — deliberately deferred until now
-   per the user's explicit instruction not to prioritize it over
-   functionality. `isShrinkResources = true` was already turned on
-   opportunistically as part of the Bug 1 fix; a fuller review (dependency
-   audit, resource audit, ABI splits if relevant) has not been started.
-3. Final verification pass: re-check `docs/KNOWN_ISSUES.md` and
-   `docs/VERIFICATION_REPORT.md` are still accurate against everything
-   implemented this session (they currently reflect only the earlier
-   Professional Product Transformation pass and need a pass for Bug 1–6).
-4. Write the final report to the user per the required format: what
-   changed, which bugs are fixed and how (un)verified, build/test results
-   including the failures above, what needs real-device testing, and the
-   latest ZIP location.
-5. **Do not push to GitHub, deploy, or perform any other external action**
-   unless the user explicitly asks again in a future message — this has
-   been the standing instruction across the last two briefs.
+1. If the user asks for further work: re-read this file and
+   `docs/AGENT_PROGRESS.md`'s latest entries first.
+2. Nothing in the current task list is left pending from this session's
+   brief; all items (root-cause both errors, audit/repair the build
+   pipeline, verify signing/update-compatibility, UI audit) are done to
+   the extent this sandbox allows.
+3. If the user reports a real build/device result (e.g., "it built but
+   failed on X", or "it installed fine", or a new error), treat that as
+   ground truth over anything in this document and start from it.
+4. **Do not push to GitHub, deploy, or perform any other external action**
+   unless the user explicitly asks again in a future message.
 
 ## Reference: `git status --short` at the time this file was written
 
@@ -209,10 +221,11 @@ M  README.md
  M android/app/src/main/java/com/luma/translate/pipeline/TranslationPipeline.kt
  M android/app/src/main/java/com/luma/translate/ui/home/HomeScreen.kt
 MM android/app/src/main/java/com/luma/translate/ui/overlay/FloatingOverlayManager.kt
+ M android/app/src/main/java/com/luma/translate/ui/privacy/PrivacySection.kt
 M  docs/ARCHITECTURE.md
-A  docs/KNOWN_ISSUES.md
+AM docs/KNOWN_ISSUES.md
 M  docs/PRIVACY.md
-M  docs/RELEASE.md
+MM docs/RELEASE.md
 M  docs/ROADMAP.md
 M  docs/SECURITY.md
 M  docs/TESTING.md

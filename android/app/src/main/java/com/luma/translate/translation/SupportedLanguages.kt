@@ -8,8 +8,8 @@ package com.luma.translate.translation
  * strings ("Japanese (ja)" / "English (en)") in the UI with no selection
  * behavior at all, while [com.luma.translate.ocr.LanguageRecognizerFactory]
  * already had real on-device recognizers for Japanese, Korean, Chinese and
- * Latin-script text, and the backend
- * (`server/src/services/*-provider.ts`) already accepted a much larger
+ * Latin-script text, and the backend provider implementations under
+ * `server/src/services/` already accepted a much larger
  * language list. The UI simply never exposed any of it. Keeping this list
  * here - rather than duplicating language codes across the UI, OCR, and
  * pipeline call sites - is what makes "selecting a language changes actual

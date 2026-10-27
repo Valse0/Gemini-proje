@@ -202,6 +202,23 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // AGENTS.md "Screen capture and overlay": "Explain why overlay
+            // permission is needed before sending the user to system
+            // settings." This was previously missing - the button below
+            // jumped straight to the system permission screen with no
+            // explanation shown first. A short, specific reason (not just
+            // "this app needs a permission") is shown only while the
+            // permission is actually missing, so it doesn't clutter the
+            // screen once setup is done.
+            if (!isOverlayPermissionGranted) {
+                Text(
+                    text = "Luma needs permission to draw over other apps so its translate button can appear on top of whatever you're using. It only shows a small floating button - it does not read or record other apps.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+
             // Bug 5/6 note: this button's only job is to get the user into an
             // active overlay session (permission -> capture consent -> the
             // floating bubble appears). The actual translation action lives

@@ -302,3 +302,154 @@ device before trusting this app**: install a debug build, grant both
 permissions, point the bubble at on-screen text, tap it, and confirm a real
 translated result appears (with a local/dev backend running and reachable,
 or `LUMA_BACKEND_URL` pointed at a reachable one).
+
+## Session: Full Project Repair, Build Stabilization & Premium UI Audit
+
+### Root cause of the two reported Kotlin errors — FOUND AND FIXED
+
+**`SupportedLanguages.kt:81:1 — Syntax error: Unclosed comment`:** The
+file's opening KDoc block comment (`/** ... */`, lines 3–30) contained, in
+its prose, the literal two-character sequence `/*` inside a path reference:
+`` `server/src/services/*-provider.ts` ``. Kotlin's lexer, like Java's and
+C's, treats `/*` as the start of a block comment **wherever it appears**,
+including inside the text of another block comment — and Kotlin block
+comments nest (unlike Java). So that stray `/*` opened a second, nested
+comment; the doc comment's own `*/` on line 30 closed that nested one
+instead of the outer one; and the real outer comment then stayed open all
+the way to end-of-file, consuming the rest of the file (the entire
+`SupportedLanguages` object, including the `Language` data class) as
+comment text. Confirmed by scanning every `.kt` file in the project for
+`/*`/`*/` count balance — this file was the only one with a mismatch (5
+opens vs 4 closes). Fixed by rewording that one line to avoid the literal
+`/*` sequence (`server/src/services/` and `*-provider.ts` no longer sit
+adjacent). Verified: a full-tree `/*`/`*/` balance scan now reports zero
+mismatches.
+
+**`HomeScreen.kt:319:53 — Unresolved reference: nativeName`:** Not a
+separate bug. `language.nativeName` at that line is a correct reference to
+`SupportedLanguages.Language.nativeName`, which is and was correctly
+defined. This error was a **downstream symptom** of the comment bug above:
+once the Kotlin compiler treated the entire body of `SupportedLanguages.kt`
+as an unterminated comment, the `Language` class (and everything else in
+that file) effectively didn't exist from the compiler's point of view for
+the rest of that compilation, so every reference to it elsewhere —
+including `nativeName` — became "unresolved." Fixing the one root cause
+above resolves both reported errors; no change was needed in `HomeScreen.kt`
+itself.
+
+This is exactly the "do not blindly apply fixes based on stale logs"
+scenario the task asked to guard against: the superficial read of the two
+errors suggested two separate problems in two separate files; the actual
+fix is a single one-line change in one file.
+
+### Build pipeline audit (`.github/workflows/build-apk.yml`)
+
+Reviewed line by line against the task's checklist. Findings and changes:
+
+1. **Action versions were significantly behind current releases**
+   (confirmed via each action's GitHub releases page): `actions/checkout`
+   v4 → **v7**, `actions/setup-java` v4 → **v6**, `gradle/actions/setup-gradle`
+   v3 → **v6**, `actions/upload-artifact` (all four uses) v4 → **v7**. Checked
+   that every `with:` input this workflow actually uses (`name`, `path`,
+   `if-no-files-found`, `retention-days`, `distribution`, `java-version`)
+   is still documented and unchanged in the current major version of each
+   action before bumping — these are low-risk, officially-recommended
+   upgrades, not a rewrite.
+2. **Added explicit `set -euo pipefail`** to the two multi-line `run:`
+   blocks that pipe `gradlew` output through `tee` (Build Debug APK, Build
+   Release APK & Bundle). GitHub Actions' default bash invocation already
+   includes `-eo pipefail`, so this was not masking a live bug today, but
+   making it explicit removes any dependency on that implicit default ever
+   changing or being overridden, directly addressing "the workflow must not
+   report success when compilation fails."
+3. **Added a new, independent verification step** ("Verify debug APK was
+   actually produced") immediately after the debug build, which fails the
+   job explicitly if `assembleDebug` reports success but no `.apk` file
+   exists under `app/build/outputs/apk/debug/`. This is in addition to (not
+   a replacement for) the existing `if-no-files-found: error` on the
+   upload-artifact step — belt and suspenders, and it gives a clearer,
+   earlier failure message.
+4. Everything else in the workflow (SDK-reuse strategy from the previous
+   pass, the optional secret-driven release signing step, the
+   `permissions: contents: read` restriction, the failure-log upload) was
+   reviewed and left as-is — it was already correct and is unrelated to
+   this task's findings.
+
+**Verification:** YAML syntax validated with `python3 -c "import yaml;
+yaml.safe_load(...)"` (parses cleanly, 12 steps). The workflow's actual
+execution has **not** been verified — this sandbox cannot reach
+GitHub Actions. **The next push to `main`/`master` (once the user
+authorizes a push) or a manual `workflow_dispatch` run is required to
+confirm it produces a green build with a downloadable debug APK.**
+
+### Backend (`server/`) test attempt
+
+`npm install` was attempted in `server/` (no `node_modules/` present).
+Failed: `ENOTFOUND registry.npmjs.org` on every package — DNS resolution
+for the npm registry is not available in this sandbox, same category of
+constraint as the Android SDK/Maven hosts (re-confirmed via the agent-proxy
+status: `dl.google.com`, `repo.maven.apache.org`, `plugins.gradle.org`,
+`services.gradle.org` all return `connect_rejected`/403 through the proxy).
+**No backend test could be run this session.** No backend source was
+changed this session either, so this is a reporting gap, not a regression
+risk.
+
+### UI audit (native Android app, Jetpack Compose)
+
+Reviewed `HomeScreen.kt`, `PrivacySection.kt`, `FloatingOverlayManager.kt`
+(already redesigned in the prior "Critical Bug Fixes" pass — not
+re-touched structurally), `MainActivity.kt`'s `Scaffold` usage, and the
+`ui/theme/` design tokens. The existing design (Material3, the app's own
+Slate/ElectricBlue/Emerald/Rose token set, `enableEdgeToEdge()` +
+`Scaffold`'s default inset handling) was already consistent and restrained
+— no broad rewrite was warranted or performed, per AGENTS.md "avoid
+unnecessary refactoring" / "preserve working code." Two concrete, scoped
+gaps were found and fixed:
+
+1. **AGENTS.md §7 violation:** "Explain why overlay permission is needed
+   before sending the user to system settings" was not actually being
+   done — the "Grant Overlay Permission" button jumped straight to
+   `Settings.ACTION_MANAGE_OVERLAY_PERMISSION` with no prior explanation
+   anywhere in the UI. Fixed in `HomeScreen.kt`: a short, specific
+   explanation (what the permission is for, what it does and does not do)
+   now shows above that button, only while the permission is actually
+   missing.
+2. **Responsiveness gap:** `PrivacySection.kt`'s content `Column` was not
+   scrollable. On a small screen, or with a larger system font-scale
+   setting (accessibility), its content could overflow and push the
+   "Understood & Agreed" button off-screen with no way to reach it. Fixed
+   by wrapping it in `Modifier.verticalScroll(rememberScrollState())`.
+
+**Verification:** NOT build/device-tested (same sandbox constraint as
+everything else this session). Both changes were re-read in full after
+editing and are structurally minimal (one conditional `Text`, one modifier
+addition) with low risk of introducing a new defect.
+
+### Signing / update-compatibility verification (no changes made beyond documentation)
+
+Re-confirmed, did not change: `applicationId`/`namespace` =
+`com.luma.translate` (`android/app/build.gradle.kts`), debug application ID
+= `com.luma.translate.debug` (`applicationIdSuffix = ".debug"`), no legacy
+`package=` attribute in `AndroidManifest.xml` overriding either. Verified
+the committed `android/app/debug.keystore` is intact and loadable
+(`keytool -list -v`): PKCS12, alias `androiddebugkey`, SHA256
+`CE:C4:AE:DE:E8:DA:20:D7:D2:83:FC:8A:AF:C7:DD:FB:18:EF:84:5A:E6:F4:6D:10:43:6D:04:D5:7E:88:1E:C6`.
+
+**Important, explicitly-documented limitation (see `docs/RELEASE.md`
+§3b):** this keystore was freshly generated in the previous session's Bug 1
+fix. It is **not** the same certificate that signed whatever debug build is
+currently installed on the user's phone (that one was random/ephemeral,
+generated implicitly per CI run, and was never saved anywhere — it cannot
+be recovered). This means the first install of a build using this
+newly-pinned keystore will likely still require removing the app that's
+currently on the phone, **one time**. Every install after that will update
+cleanly in place, since the keystore is now fixed and committed. This was
+not previously called out this explicitly and has been added to
+`docs/RELEASE.md` along with the exact `keytool`/`adb`/`apksigner` commands
+needed to check a specific device's installed certificate in advance.
+
+### Final state
+
+No `git push`, deploy, or other external/remote action was performed —
+everything above is in the local working copy only, per the explicit
+instruction at the top of this task.

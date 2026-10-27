@@ -2,7 +2,9 @@ package com.luma.translate.ui.privacy
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,8 +25,14 @@ fun PrivacySection(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp
     ) {
+        // Scrollable so this doesn't clip on small screens or with larger
+        // system font-scale settings (more privacy points may be added
+        // here later too) - previously a fixed, non-scrolling Column could
+        // push the "Understood & Agreed" button off-screen in either case.
         Column(
-            modifier = Modifier.padding(24.dp),
+            modifier = Modifier
+                .padding(24.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(

@@ -35,7 +35,30 @@ class PreferencesRepository(context: Context) {
             ?: SupportedLanguages.DEFAULT_TARGET_CODE
         set(value) = prefs.edit().putString(KEY_TARGET_LANGUAGE, value).apply()
 
+    /**
+     * User-entered translation server address (e.g. https://translate.example.com).
+     * Empty string means "not set": the build-time default
+     * (BuildConfig.BACKEND_BASE_URL) is used instead. Needed because the
+     * build default is the emulator-only alias 10.0.2.2, which a physical
+     * phone can never reach (see docs/analysis/BUG_AUDIT.md, BUG-01).
+     */
+    var backendUrl: String
+        get() = prefs.getString(KEY_BACKEND_URL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_BACKEND_URL, value.trim()).apply()
+
     companion object {
+        /** Returns the normalized URL if acceptable, otherwise null. */
+        fun normalizeBackendUrl(input: String, allowCleartext: Boolean): String? {
+            val v = input.trim().trimEnd('/')
+            if (v.isEmpty()) return ""
+            val lower = v.lowercase()
+            val ok = lower.startsWith("https://") || (allowCleartext && lower.startsWith("http://"))
+            if (!ok || v.length > 200 || v.any { it.isWhitespace() }) return null
+            val host = v.substringAfter("://").substringBefore('/').substringBefore(':')
+            return if (host.isEmpty()) null else v
+        }
+
+        private const val KEY_BACKEND_URL = "backend_url"
         private const val PREFS_NAME = "luma_preferences"
         private const val KEY_SOURCE_LANGUAGE = "source_language_code"
         private const val KEY_TARGET_LANGUAGE = "target_language_code"

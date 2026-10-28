@@ -14,13 +14,18 @@ jobs:
   build:
     name: Build Android APK & AAB
     runs-on: ubuntu-latest
+    # `secrets` is not available in step-level `if:` expressions (workflow
+    # validation error), and a step's own `env:` is not visible to its own
+    # `if:`. Exposing the secret at job level lets the decode step test it.
+    env:
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -53,22 +58,46 @@ jobs:
           fi
           echo "Using sdkmanager at: $SDKMANAGER"
 
-          # Grant ownership of SDK_ROOT to runner user so sdkmanager can write licenses and packages
+          # Grant ownership of SDK_ROOT to the runner user so sdkmanager can write licenses and packages
           sudo chown -R "$USER:$USER" "$SDK_ROOT" || true
 
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v6
         with:
           build-root-directory: android
 
       - name: Build Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --stacktrace 2>&1 | tee ../build_error.log
+        # `set -o pipefail` is explicit here (GitHub's default bash
+        # invocation already includes it, but this step must never silently
+        # report success through `tee` if `./gradlew` itself fails -
+        # relying only on an implicit shell default for that is exactly the
+        # kind of fragile behavior this pass was asked to remove).
+        run: |
+          set -euo pipefail
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee ../build_error.log
         env:
           BUILD_NUMBER: ${{ github.run_number }}
+
+      # Second, independent guard (beyond the upload step's
+      # if-no-files-found: error below): fail the job immediately, with an
+      # explicit message, if assembleDebug reported success but somehow
+      # produced no APK - rather than letting that surface only much later
+      # as an opaque upload-artifact failure.
+      - name: Verify debug APK was actually produced
+        working-directory: android
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/debug/*.apk)
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "::error::assembleDebug reported success but no APK exists under app/build/outputs/apk/debug/. Treating this as a build failure."
+            exit 1
+          fi
+          echo "Debug APK(s) found: ${apks[*]}"
 
       # Release signing is optional and secret-driven. When a real signing
       # key is stored in repository secrets, decode it to a local file (never
@@ -81,7 +110,6 @@ jobs:
       # on the next step didn't correspond to anything Gradle actually read
       # (no `shouldSign` property existed anywhere in the build scripts), so
       # it has been removed rather than kept as dead configuration.
-    
       - name: Decode release signing key (if configured)
         if: ${{ env.RELEASE_KEYSTORE_BASE64 != '' }}
         working-directory: android
@@ -92,6 +120,7 @@ jobs:
       - name: Build Release APK & Bundle (AAB)
         working-directory: android
         run: |
+          set -euo pipefail
           if [ -f app/release.keystore ]; then
             ./gradlew assembleRelease bundleRelease --stacktrace \
               -PRELEASE_STORE_FILE=release.keystore \
@@ -110,7 +139,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
       - name: Upload Debug APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Luma-Translate-Debug-APK
           path: android/app/build/outputs/apk/debug/*.apk
@@ -118,7 +147,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Release APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Luma-Translate-Release-APK
           path: android/app/build/outputs/apk/release/*.apk
@@ -126,7 +155,7 @@ jobs:
           retention-days: 14
 
       - name: Upload Release Bundle Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Luma-Translate-Release-AAB
           path: android/app/build/outputs/bundle/release/*.aab
@@ -144,7 +173,7 @@ jobs:
       # churn on the default branch from an automated workflow.
       - name: Upload build log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-failure-log-${{ github.run_number }}
           path: build_error.log

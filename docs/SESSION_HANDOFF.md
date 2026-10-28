@@ -242,3 +242,9 @@ M  yml_hata.md
 ?? docs/AGENT_PROGRESS.md
 ?? docs/SESSION_HANDOFF.md
 ```
+
+
+## Session 4 update
+See `docs/AGENT_PROGRESS.md` (Session 4) and `docs/analysis/*`. State: all changes local and uncommitted; nothing pushed.
+Next steps: run `./gradlew testDebugUnitTest assembleDebug` with network; on-device checks (Server settings with an HTTPS
+backend, notification prompt on Android 13+, Hata3 adb output); then commit/push only if the owner asks.

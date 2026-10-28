@@ -222,3 +222,9 @@ To avoid re-litigating these in a future pass:
   intact (valid zip, executable `gradlew`); the project's declared
   `distributionUrl` points at Gradle 8.6, which is compatible with the
   declared AGP 8.4.2 / Kotlin 2.0.0.
+
+## Added in session 4
+- Builds/tests not executed in the authoring sandbox (no network); verify in CI or locally.
+- No hosted backend: translation needs the user to set an HTTPS server address in Server settings.
+- Hata3 install conflict: likely signature mismatch with a previously installed build; one reinstall may be needed. Unproven without device output.
+- Capture size is still fixed 1080x1920/400dpi (BUG-08).

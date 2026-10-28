@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private var hasOverlayPermission by mutableStateOf(false)
     private var sourceLanguageCode by mutableStateOf(SupportedLanguages.DEFAULT_SOURCE_CODE)
     private var targetLanguageCode by mutableStateOf(SupportedLanguages.DEFAULT_TARGET_CODE)
+    private var backendUrl by mutableStateOf("")
     private var isCapturing by mutableStateOf(false)
     private var captureDeniedMessage by mutableStateOf<String?>(null)
 
@@ -108,8 +109,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Android 13+: the session notification (with its Stop action) is only
+    // shown if POST_NOTIFICATIONS is granted. Asked once, in context (right
+    // after the user taps Start), never at first launch. Denial is harmless:
+    // the capture session still starts, so we continue either way and never
+    // loop. Permanently denied -> the system simply doesn't show the dialog
+    // and the callback fires with false; the session still works.
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { launchProjectionConsent() }
+
     private fun requestScreenCapture() {
         captureDeniedMessage = null
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            launchProjectionConsent()
+        }
+    }
+
+    private fun launchProjectionConsent() {
         val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjectionLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
@@ -120,6 +142,7 @@ class MainActivity : ComponentActivity() {
         hasOverlayPermission = checkOverlayPermission()
         sourceLanguageCode = preferences.sourceLanguageCode
         targetLanguageCode = preferences.targetLanguageCode
+        backendUrl = preferences.backendUrl
         enableEdgeToEdge()
         setContent {
             LumaTheme {
@@ -171,6 +194,17 @@ class MainActivity : ComponentActivity() {
                                 isCapturing = false
                             },
                             onOpenPrivacyInfo = { showPrivacy = true },
+                            backendUrl = backendUrl,
+                            onBackendUrlSaved = { input ->
+                                val normalized = PreferencesRepository.normalizeBackendUrl(
+                                    input, allowCleartext = com.luma.translate.BuildConfig.DEBUG
+                                )
+                                if (normalized == null) false else {
+                                    preferences.backendUrl = normalized
+                                    backendUrl = normalized
+                                    true
+                                }
+                            },
                             modifier = Modifier.padding(innerPadding)
                         )
                     }

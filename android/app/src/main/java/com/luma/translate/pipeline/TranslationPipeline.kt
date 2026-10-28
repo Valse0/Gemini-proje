@@ -1,6 +1,7 @@
 package com.luma.translate.pipeline
 
 import android.graphics.Bitmap
+import android.util.Log
 import com.luma.translate.BuildConfig
 import com.luma.translate.ocr.NormalizedRect
 import com.luma.translate.ocr.OcrManager
@@ -49,6 +50,10 @@ sealed class PipelineResult {
     ) : PipelineResult()
 
     object EmptyOcr : PipelineResult()
+    /** Classified, user-presentable failure (no raw exception text). */
+    data class Failure(val kind: FailureKind) : PipelineResult() {
+        val message: String get() = kind.userMessage
+    }
     data class NetworkError(val message: String) : PipelineResult()
     data class GeneralError(val error: Throwable) : PipelineResult()
 }
@@ -64,7 +69,8 @@ class TranslationPipeline(
     // or a non-local backend. Now sourced from BuildConfig.BACKEND_BASE_URL,
     // which is itself configurable per build (see app/build.gradle.kts /
     // -PLUMA_BACKEND_URL / android/local.properties) without touching code.
-    private val backendBaseUrl: String = BuildConfig.BACKEND_BASE_URL,
+    private val backendBaseUrlProvider: () -> String = { BuildConfig.BACKEND_BASE_URL },
+    private val isEmulator: Boolean = false,
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
@@ -83,6 +89,14 @@ class TranslationPipeline(
     ): PipelineResult = withContext(Dispatchers.IO) {
         val totalStart = System.currentTimeMillis()
 
+        // Fail fast, with the real reason, when the configured address is the
+        // emulator-only alias but we're on a physical phone (see
+        // TranslationFailure.kt: this is exactly what Hata1/2/4 showed).
+        val baseUrl = backendBaseUrlProvider().trim().trimEnd('/')
+        if (baseUrl.isEmpty() || isEmulatorOnlyUrlOnRealDevice(baseUrl, isEmulator)) {
+            return@withContext PipelineResult.Failure(FailureKind.NOT_CONFIGURED)
+        }
+
         try {
             // 1. On-Device OCR Step
             val ocrStart = System.currentTimeMillis()
@@ -98,8 +112,14 @@ class TranslationPipeline(
             val translatedRegions = mutableListOf<TranslatedRegion>()
 
             for (block in ocrResult.blocks) {
+                // Empty OCR blocks are skipped; text beyond the backend's
+                // MAX_TEXT_LENGTH (2000) is trimmed instead of triggering a
+                // guaranteed 400 for the whole screen.
+                val text = block.text.trim().take(MAX_TEXT_LENGTH)
+                if (text.isEmpty()) continue
                 val translation = translateTextViaBackend(
-                    text = block.text,
+                    baseUrl = baseUrl,
+                    text = text,
                     sourceLanguage = sourceLanguage,
                     targetLanguage = targetLanguage,
                     context = context
@@ -108,13 +128,14 @@ class TranslationPipeline(
                 translatedRegions.add(
                     TranslatedRegion(
                         id = block.id,
-                        originalText = block.text,
+                        originalText = text,
                         translatedText = translation.translatedText,
                         boundingBox = block.boundingBox,
                         confidence = block.confidence
                     )
                 )
             }
+            if (translatedRegions.isEmpty()) return@withContext PipelineResult.EmptyOcr
             val netDuration = System.currentTimeMillis() - netStart
             val totalDuration = System.currentTimeMillis() - totalStart
 
@@ -131,12 +152,18 @@ class TranslationPipeline(
                 targetLanguage = targetLanguage,
                 metrics = metrics
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            PipelineResult.GeneralError(e)
+            // Class name only: exception messages can contain hosts, ports
+            // or (for parse errors) response/screen text.
+            Log.w(TAG, "Translation failed: ${e.javaClass.simpleName}")
+            PipelineResult.Failure(TranslationFailureClassifier.classify(e))
         }
     }
 
     private fun translateTextViaBackend(
+        baseUrl: String,
         text: String,
         sourceLanguage: String,
         targetLanguage: String,
@@ -150,29 +177,32 @@ class TranslationPipeline(
         }
 
         val request = Request.Builder()
-            .url("$backendBaseUrl/v1/translate")
+            .url("$baseUrl/v1/translate")
             .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = httpClient.newCall(request).execute()
-        val responseBody = response.body?.string() ?: throw IllegalStateException("Empty backend response")
-
-        if (!response.isSuccessful) {
-            val errorMsg = try {
-                JSONObject(responseBody).getJSONObject("error").getString("message")
-            } catch (e: Exception) {
-                "HTTP ${response.code}: $responseBody"
+        // `use` closes the response body on every path (no leaked connections).
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw BackendHttpException(response.code)
+            val body = response.body?.string()
+            if (body.isNullOrBlank()) throw BadBackendResponseException()
+            try {
+                val resJson = JSONObject(body)
+                return TranslationResponse(
+                    translatedText = resJson.getString("translatedText"),
+                    detectedSourceLanguage = resJson.optString("detectedSourceLanguage", sourceLanguage),
+                    targetLanguage = resJson.optString("targetLanguage", targetLanguage),
+                    provider = resJson.optString("provider", ""),
+                    durationMs = resJson.optLong("durationMs", 0L)
+                )
+            } catch (e: org.json.JSONException) {
+                throw BadBackendResponseException(e)
             }
-            throw IllegalStateException(errorMsg)
         }
+    }
 
-        val resJson = JSONObject(responseBody)
-        return TranslationResponse(
-            translatedText = resJson.getString("translatedText"),
-            detectedSourceLanguage = resJson.getString("detectedSourceLanguage"),
-            targetLanguage = resJson.getString("targetLanguage"),
-            provider = resJson.getString("provider"),
-            durationMs = resJson.getLong("durationMs")
-        )
+    private companion object {
+        const val TAG = "TranslationPipeline"
+        const val MAX_TEXT_LENGTH = 2000
     }
 }

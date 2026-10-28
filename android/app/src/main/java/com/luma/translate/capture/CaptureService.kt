@@ -18,8 +18,11 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
+import com.luma.translate.BuildConfig
 import com.luma.translate.MainActivity
+import com.luma.translate.data.PreferencesRepository
 import com.luma.translate.ocr.OcrManager
+import com.luma.translate.pipeline.FailureKind
 import com.luma.translate.pipeline.PipelineResult
 import com.luma.translate.pipeline.TranslationPipeline
 import com.luma.translate.translation.SupportedLanguages
@@ -71,7 +74,23 @@ class CaptureService : Service() {
     // (OcrManager, ML Kit); only recognized text + language codes go to the
     // backend (TranslationPipeline), per docs/PRIVACY.md.
     private val ocrManager = OcrManager()
-    private val translationPipeline = TranslationPipeline(ocrManager)
+    private val translationPipeline by lazy {
+        val prefs = PreferencesRepository(this)
+        TranslationPipeline(
+            ocrManager = ocrManager,
+            backendBaseUrlProvider = {
+                prefs.backendUrl.ifBlank { BuildConfig.BACKEND_BASE_URL }
+            },
+            isEmulator = isProbablyEmulator()
+        )
+    }
+
+    private fun isProbablyEmulator(): Boolean =
+        Build.FINGERPRINT.startsWith("generic") ||
+            Build.FINGERPRINT.contains("emulator") ||
+            Build.MODEL.contains("Emulator") ||
+            Build.MODEL.contains("Android SDK built for") ||
+            Build.PRODUCT.contains("sdk_gphone")
 
     // Service-scoped coroutine scope for the pipeline's async work. Tied to
     // the service's own lifecycle (cancelled in stopCapture()/onDestroy()),
@@ -245,7 +264,7 @@ class CaptureService : Service() {
                     targetLanguage = targetLanguage
                 )
             } catch (e: Exception) {
-                Log.e(TAG, "Translation pipeline threw unexpectedly", e)
+                Log.e(TAG, "Translation pipeline threw unexpectedly: ${e.javaClass.simpleName}")
                 PipelineResult.GeneralError(e)
             }
 
@@ -257,14 +276,10 @@ class CaptureService : Service() {
             when (result) {
                 is PipelineResult.Success -> manager.updateState(OverlayUiState.Success(result.regions))
                 is PipelineResult.EmptyOcr -> manager.updateState(OverlayUiState.EmptyResult)
-                is PipelineResult.NetworkError -> manager.updateState(
-                    OverlayUiState.Error("Couldn't reach the translation backend: ${result.message}")
-                )
+                is PipelineResult.Failure -> manager.updateState(OverlayUiState.Error(result.message))
+                is PipelineResult.NetworkError -> manager.updateState(OverlayUiState.Error(result.message))
                 is PipelineResult.GeneralError -> manager.updateState(
-                    OverlayUiState.Error(
-                        result.error.message?.let { "Translation failed: $it" }
-                            ?: "Translation failed unexpectedly."
-                    )
+                    OverlayUiState.Error(FailureKind.UNKNOWN.userMessage)
                 )
             }
         }

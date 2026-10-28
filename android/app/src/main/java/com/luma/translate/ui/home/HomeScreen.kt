@@ -38,12 +38,23 @@ fun HomeScreen(
     onStartCapture: () -> Unit,
     onStopCapture: () -> Unit,
     onOpenPrivacyInfo: () -> Unit,
+    backendUrl: String = "",
+    onBackendUrlSaved: (String) -> Boolean = { true },
     modifier: Modifier = Modifier
 ) {
+    var showServerDialog by remember { mutableStateOf(false) }
     var pickerTarget by remember { mutableStateOf(LanguagePickerTarget.NONE) }
 
     val sourceLanguage = SupportedLanguages.sourceLanguageOrDefault(sourceLanguageCode)
     val targetLanguage = SupportedLanguages.targetLanguageOrDefault(targetLanguageCode)
+
+    if (showServerDialog) {
+        ServerSettingsDialog(
+            current = backendUrl,
+            onSave = { value -> if (onBackendUrlSaved(value)) { showServerDialog = false; true } else false },
+            onDismiss = { showServerDialog = false }
+        )
+    }
 
     if (pickerTarget != LanguagePickerTarget.NONE) {
         LanguagePickerDialog(
@@ -273,6 +284,16 @@ fun HomeScreen(
             }
 
             TextButton(
+                onClick = { showServerDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (backendUrl.isBlank()) "Server settings (not set)" else "Server settings",
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+
+            TextButton(
                 onClick = onOpenPrivacyInfo,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -353,4 +374,47 @@ private fun LanguagePickerDialog(
             }
         }
     }
+}
+
+/**
+ * Lets the user point Luma at their own translation server. Only text (never
+ * images) is sent there. The field is validated by the caller; an invalid
+ * value keeps the dialog open with an explanation.
+ */
+@Composable
+private fun ServerSettingsDialog(
+    current: String,
+    onSave: (String) -> Boolean,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf(current) }
+    var error by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Server settings") },
+        text = {
+            Column {
+                Text(
+                    "Address of your Luma translation server, e.g. https://translate.example.com. " +
+                        "Only recognized text is sent there, never screenshots.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it; error = false },
+                    singleLine = true,
+                    isError = error,
+                    label = { Text("Server address") },
+                    supportingText = if (error) {
+                        { Text("Enter a valid https:// address.") }
+                    } else null
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { error = !onSave(text) }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }

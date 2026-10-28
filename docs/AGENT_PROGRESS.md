@@ -453,3 +453,16 @@ needed to check a specific device's installed certificate in advance.
 No `git push`, deploy, or other external/remote action was performed —
 everything above is in the local working copy only, per the explicit
 instruction at the top of this task.
+
+## Session 4 — Competitor analysis, Hata1–4 diagnosis, translation errors, permissions
+
+- `git pull` done non-destructively (HEAD = origin/main 8ab6775); workflow merged with remote fixes.
+- New docs: `docs/analysis/COMPETITOR_ANALYSIS.md`, `BUG_AUDIT.md`, `REMEDIATION_PLAN.md`.
+- Code: `TranslationFailure.kt` (classifier), `TranslationPipeline` (fail-fast, safe logs, `use{}`, length limits),
+  `PreferencesRepository.backendUrl` + `normalizeBackendUrl`, Server settings dialog (HomeScreen/MainActivity),
+  `CaptureService` maps `PipelineResult.Failure`, real-emulator detection, URL provider; POST_NOTIFICATIONS requested
+  contextually after Start (API 33+).
+- Tests added: `TranslationFailureTest` (JVM). **Not executed** — Gradle distribution/Maven unreachable in sandbox
+  (services.gradle.org refused). Only static checks (brace/paren/comment balance) were run.
+- Not done (needs approval): key creation/replacement, package rename, uninstall, push/deploy, backend hosting.
+- Hata3 remains a diagnosis (signature mismatch most likely), needs adb/apksigner output from the phone.

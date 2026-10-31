@@ -24,9 +24,7 @@ package com.luma.translate.translation
  * both produce plausible-looking (but wrong) output from either
  * recognizer. Offering a fake "Auto" option would violate the explicit
  * requirement to make unsupported/unreliable combinations honest rather
- * than silently guessing. The backend's own `sourceLanguage: "auto"` mode
- * (used for *translation*, not OCR script selection) remains available at
- * the API level for future use once a reliable detection strategy exists.
+ * than silently guessing.
  */
 object SupportedLanguages {
 
@@ -44,7 +42,7 @@ object SupportedLanguages {
     )
 
     /**
-     * Languages the backend is configured to translate into. Kept to the
+     * Languages Luma translates into (all have on-device ML Kit language packs). Kept to the
      * practical set called for in the product brief (English, Turkish,
      * Spanish) rather than the full list
      * [com.luma.translate.translation] theoretically supports server-side -
@@ -69,8 +67,7 @@ object SupportedLanguages {
     /**
      * Whether translating from [sourceCode] into [targetCode] is a pairing
      * Luma actually supports end-to-end. Source and target happening to be
-     * the same language is allowed (the backend's providers already handle
-     * "already in the target language" as a pass-through case), but any
+     * the same language is allowed (the text is passed through unchanged), but any
      * code outside the two lists above is not.
      */
     fun isSupportedPair(sourceCode: String, targetCode: String): Boolean {

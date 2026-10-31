@@ -38,3 +38,10 @@ Legend: **[O]** observed in the reference, **[I]** inference, **[U]** unverified
 | No quick-settings tile | Open, P3 |
 
 Nothing here was verified on a device; the reference app was only statically inspected.
+
+
+## Session 5 update
+Re-checked at manifest/component level only (no code copied). Additional observation [O]: the reference declares cloud OCR
+clients alongside ML Kit/tesseract references; Luma deliberately keeps OCR and translation fully on-device, which is
+its main differentiator. Luma now also requests permissions contextually (the reference declares 22 permissions in
+its manifest) and has no ads/analytics SDKs. Quality parity with cloud engines is **not** claimed.

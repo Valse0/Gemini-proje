@@ -9,6 +9,13 @@ screen content without repeatedly switching between applications.
 Our goal is to combine fast interaction, useful translation quality,
 transparent privacy practices, and a polished interface.
 
+> **Current architecture (supersedes older backend wording in this repository):**
+> the Android app translates **on-device** (Google ML Kit OCR + ML Kit
+> Translation). It needs no server, VPS, API key, account or paid API. Optional
+> language packs are downloaded only after the user taps Download. The
+> `server/` project is no longer used by the app. See `docs/MODELS.md`,
+> `docs/PRIVACY.md` and `docs/analysis/`.
+
 ## Product principles
 
 - **Privacy by design:** OCR should run on the device whenever supported.
@@ -47,11 +54,10 @@ workflow before adding specialized behavior.
 - OCR: Google ML Kit or another suitable on-device OCR implementation
 - Screen capture: Android MediaProjection with explicit user consent
 - Floating controls: Android overlay APIs, only after permission is granted
-- Translation: a small backend with a replaceable provider interface
-- Initial translation provider: Gemini API behind the provider interface,
-  subject to successful integration and quality tests
-- Backend: TypeScript and Node.js
-- Build: Gradle for Android; npm scripts for the backend
+- Translation: Google ML Kit on-device Translation (optional, consent-based
+  language-pack downloads; works offline once installed)
+- `server/` (TypeScript/Node.js): legacy optional translation API, not used by the app
+- Build: Gradle for Android (built by GitHub Actions); npm scripts for the legacy server/web app
 - Source control: Git and GitHub
 
 The translation provider must remain replaceable. Provider-specific code
@@ -61,21 +67,22 @@ must not be scattered across the Android application.
 
 The implementation must follow `docs/PRIVACY.md` and `docs/SECURITY.md`.
 
-The intended default behavior is:
+The implemented behavior is:
 
 - OCR runs locally on the device.
-- Only necessary recognized text and translation settings are sent to
-  the backend.
-- Screenshots are not uploaded for ordinary text translation.
-- API credentials stay on the backend and are never embedded in the APK.
+- Translation runs locally on the device; recognized text is not sent to any server.
+- Screenshots are never uploaded.
+- No API keys or credentials exist in the app. The only network use is the
+  optional, user-approved language-pack download.
 - Translation text is not written to application logs by default.
 - Any optional analytics or persistent history requires explicit design,
   documentation, and user-facing disclosure.
 
-Do not describe the app as completely offline: online translation requires
-a network connection unless an offline translation engine is implemented.
-Do not claim zero data retention until all relevant providers, servers,
-logs, and operational settings have been verified.
+Translation works offline once the needed language packs are installed. The
+first use of a language pair needs a one-time download, so the app is not
+"offline from the first launch". Google ML Kit may exchange non-content
+diagnostic/usage metrics under its own privacy terms. This has not been
+tested on a physical device yet (see `docs/KNOWN_ISSUES.md`).
 
 ## Repository layout
 
@@ -114,11 +121,12 @@ luma-translate/
 │           │       ├── capture/           # MediaProjection + permission flow
 │           │       ├── ocr/               # ML Kit on-device text recognition
 │           │       ├── pipeline/           # OCR -> translation orchestration
-│           │       ├── translation/       # Backend client contract
+│           │       ├── translation/       # ML Kit translator + language-pack manager
+│           │       ├── util/              # Task await helper, external links
 │           │       ├── settings/
 │           │       └── release/
 │           └── test/                      # JVM unit tests (no androidTest/ yet)
-├── server/                           # Secure, replaceable-provider translation API
+├── server/                           # Legacy optional translation API (unused by the app)
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── test/translate.test.ts
@@ -150,9 +158,9 @@ luma-translate/
 - **Android (`android/`)** is the primary, user-facing product. Prioritize
   its buildability, permissions, lifecycle handling, OCR, translation, and
   overlay behavior over anything else in this repository.
-- **Backend (`server/`)** is a small, provider-independent translation API.
-  It must stay secure, validated, and testable, and must never expose
-  provider credentials to any client.
+- **Legacy server (`server/`)** is a small translation API that the app no
+  longer calls. It is kept for reference; do not reintroduce it as a
+  requirement for the core translation flow.
 - **Web app (`src/`, `index.html`, root `vite.config.ts`/`package.json`)** is
   a development, testing, and diagnostic companion (acceptance-suite,
   Android-behavior simulation, OCR visualization, release and settings

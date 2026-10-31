@@ -4,19 +4,17 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import com.luma.translate.ocr.OcrManager
-import com.luma.translate.pipeline.TranslationPipeline
 
 /**
  * Release Readiness Inspector & Configuration Validator
  * Validates production environment readiness, debug flags, OCR dependencies,
- * and backend connectivity for Google Play deployment.
+ * for Google Play deployment. (There is no backend: translation is on-device.)
  */
 data class ReleaseReport(
     val isDebugBuild: Boolean,
     val isMinSdkValid: Boolean,
     val isTargetSdkValid: Boolean,
     val ocrReady: Boolean,
-    val backendEndpoint: String,
     val readinessStatus: String
 )
 
@@ -32,7 +30,6 @@ class ReleaseInspector(private val context: Context) {
             isMinSdkValid = minSdkOk,
             isTargetSdkValid = targetSdkOk,
             ocrReady = true, // ML Kit packages bundled
-            backendEndpoint = "https://luma-translate-api.internal/v1/translate",
             readinessStatus = if (!isDebug && minSdkOk && targetSdkOk) "READY_FOR_PLAY_CONSOLE" else "DEVELOPMENT_MODE"
         )
     }

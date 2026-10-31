@@ -1,30 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Debug-build-only network security config.
+  Debug network security config.
 
-  Without this, the app cannot reach a plain-HTTP dev backend at all: since
-  API 28 (this project's targetSdk is 34), Android blocks cleartext (non-TLS)
-  HTTP traffic by default. TranslationPipeline.kt's backend call used
-  `http://10.0.2.2:3000` (the standard Android-emulator alias for the host
-  machine's localhost) with no network security config present anywhere in
-  the app, so every translation request would have failed immediately with
-  a CleartextNotPermittedException - silently, from the user's point of
-  view, this looks identical to "the app never translates anything" (the
-  exact Bug 6 report). This is a likely *additional* root cause of Bug 6
-  alongside the pipeline never being wired up at all (see
-  CaptureService.kt).
+  Earlier versions allowed cleartext HTTP to 10.0.2.2/localhost so debug builds
+  could reach a local translation backend. Translation is now fully on-device
+  and the only network use is HTTPS language-pack downloads handled by Google
+  ML Kit, so no cleartext exception is needed any more and none is granted.
 
-  This file applies to debug builds ONLY (see the matching, cleartext-free
-  src/release/res/xml/network_security_config.xml). Production/release
-  builds must use HTTPS, per docs/SECURITY.md ("Use HTTPS in production")
-  and AGENTS.md ("Do not claim the service is hardened without reviewing
-  its actual deployment configuration").
+  A same-named file must exist in every build variant (the manifest references
+  @xml/network_security_config); see src/release/res/xml/network_security_config.xml.
 -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <!-- Standard Android-emulator alias for the host machine's localhost. -->
-        <domain includeSubdomains="false">10.0.2.2</domain>
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

@@ -10,7 +10,7 @@ mlkitOcr = "16.0.0"
 mlkitChinese = "16.0.0"
 mlkitJapanese = "16.0.0"
 mlkitKorean = "16.0.0"
-okhttp = "4.12.0"
+mlkitTranslate = "17.0.3"
 coroutines = "1.8.1"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -36,9 +36,9 @@ mlkit-text-japanese = { group = "com.google.mlkit", name = "text-recognition-jap
 mlkit-text-korean = { group = "com.google.mlkit", name = "text-recognition-korean", version.ref = "mlkitKorean" }
 mlkit-text-chinese = { group = "com.google.mlkit", name = "text-recognition-chinese", version.ref = "mlkitChinese" }
 
-# Networking (Backend Translation Client)
-okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
-okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+# ML Kit On-device Translation (language models are optional downloads, fetched only after user consent)
+mlkit-translate = { group = "com.google.mlkit", name = "translate", version.ref = "mlkitTranslate" }
+
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 
 # Testing

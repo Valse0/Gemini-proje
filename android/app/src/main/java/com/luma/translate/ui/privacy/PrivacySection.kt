@@ -50,16 +50,20 @@ fun PrivacySection(
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrivacyPoint(
-                    title = "1. On-Device OCR Execution",
-                    description = "Screen text is extracted locally using on-device ML Kit models. Screen images and bitmaps are never uploaded to any remote server."
+                    title = "1. On-Device OCR",
+                    description = "Screen text is extracted locally using on-device ML Kit models. Screen images are never uploaded anywhere."
                 )
                 PrivacyPoint(
-                    title = "2. Minimal Text Transmission",
-                    description = "Only the bounded extracted text string and language settings are sent to the translation backend."
+                    title = "2. On-Device Translation",
+                    description = "Recognized text is translated on your phone with Google ML Kit language packs. Your screen text is not sent to any translation server, and there is no account or API key."
                 )
                 PrivacyPoint(
-                    title = "3. Zero Telemetry & Secret Safety",
-                    description = "No translation text or personal data is logged. Provider credentials reside strictly on the server and are never included in the APK."
+                    title = "3. Optional Language-Pack Downloads",
+                    description = "The only network use is downloading language packs, and only after you tap Download. The download fetches the packs; it does not upload your text. Google's ML Kit may also exchange non-content diagnostic/usage metrics as described in its privacy documentation."
+                )
+                PrivacyPoint(
+                    title = "4. No Tracking",
+                    description = "Luma adds no analytics and does not log recognized or translated text. Support and Feedback links simply open your web browser."
                 )
             }
 

@@ -16,7 +16,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
+import com.luma.translate.app.LumaApplication
 import com.luma.translate.capture.CaptureService
+import com.luma.translate.translation.TranslationModelManager
+import com.luma.translate.ui.models.ModelDownloadDialog
+import com.luma.translate.ui.settings.SettingsScreen
+import com.luma.translate.util.SupportLinks
+import com.luma.translate.util.openExternalLink
+import kotlinx.coroutines.launch
 import com.luma.translate.data.PreferencesRepository
 import com.luma.translate.translation.SupportedLanguages
 import com.luma.translate.ui.home.HomeScreen
@@ -34,7 +43,13 @@ class MainActivity : ComponentActivity() {
     private var hasOverlayPermission by mutableStateOf(false)
     private var sourceLanguageCode by mutableStateOf(SupportedLanguages.DEFAULT_SOURCE_CODE)
     private var targetLanguageCode by mutableStateOf(SupportedLanguages.DEFAULT_TARGET_CODE)
-    private var backendUrl by mutableStateOf("")
+    private var isTranslationReady by mutableStateOf(false)
+    private var showModelDialog by mutableStateOf(false)
+    private var wifiOnly by mutableStateOf(true)
+    // Set when the user tried to start a session before the language pack was
+    // installed; after a successful consented download the start flow resumes.
+    private var resumeStartAfterDownload = false
+    private lateinit var modelManager: TranslationModelManager
     private var isCapturing by mutableStateOf(false)
     private var captureDeniedMessage by mutableStateOf<String?>(null)
 
@@ -58,6 +73,9 @@ class MainActivity : ComponentActivity() {
         // "Grant Overlay Permission" - no loop, no repeated prompt.
         if (wasAwaiting && hasOverlayPermission) {
             requestScreenCapture()
+        } else if (wasAwaiting) {
+            captureDeniedMessage = "Overlay permission wasn't granted. Luma needs it to show the floating " +
+                "translate button on top of other apps. Tap the button to try again."
         }
     }
 
@@ -121,6 +139,14 @@ class MainActivity : ComponentActivity() {
 
     private fun requestScreenCapture() {
         captureDeniedMessage = null
+        // Translation is on-device and needs the language pack first. Ask for
+        // it (with consent) instead of starting a session that can't translate.
+        if (!isTranslationReady) {
+            resumeStartAfterDownload = true
+            modelManager.clearFailure()
+            showModelDialog = true
+            return
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -136,17 +162,33 @@ class MainActivity : ComponentActivity() {
         mediaProjectionLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
 
+    private fun refreshTranslationReady() {
+        lifecycleScope.launch {
+            isTranslationReady = modelManager.isPairReady(sourceLanguageCode, targetLanguageCode)
+        }
+    }
+
+    private fun openLink(url: String) {
+        if (!openExternalLink(this, url)) {
+            Toast.makeText(this, "No web browser was found to open this link.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         preferences = PreferencesRepository(this)
         hasOverlayPermission = checkOverlayPermission()
         sourceLanguageCode = preferences.sourceLanguageCode
         targetLanguageCode = preferences.targetLanguageCode
-        backendUrl = preferences.backendUrl
+        wifiOnly = preferences.downloadWifiOnly
+        modelManager = (application as LumaApplication).modelManager
         enableEdgeToEdge()
         setContent {
             LumaTheme {
                 var showPrivacy by remember { mutableStateOf(false) }
+                var showSettings by remember { mutableStateOf(false) }
+                val opState by modelManager.state.collectAsState()
+                val installedLanguages by modelManager.installed.collectAsState()
 
                 // General resume refresh: catches the case where the user
                 // revoked overlay permission from system settings while the
@@ -158,14 +200,70 @@ class MainActivity : ComponentActivity() {
                     val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                         if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                             hasOverlayPermission = checkOverlayPermission()
+                            lifecycleScope.launch { modelManager.refresh() }
+                            refreshTranslationReady()
                         }
                     }
                     lifecycle.addObserver(observer)
                     onDispose { lifecycle.removeObserver(observer) }
                 }
 
+                if (showModelDialog) {
+                    ModelDownloadDialog(
+                        sourceName = SupportedLanguages.sourceLanguageOrDefault(sourceLanguageCode).displayName,
+                        targetName = SupportedLanguages.targetLanguageOrDefault(targetLanguageCode).displayName,
+                        wifiOnly = wifiOnly,
+                        onWifiOnlyChange = { wifiOnly = it; preferences.downloadWifiOnly = it },
+                        state = opState,
+                        onDownload = {
+                            lifecycleScope.launch {
+                                val ok = modelManager.downloadPair(sourceLanguageCode, targetLanguageCode, wifiOnly)
+                                if (ok) {
+                                    isTranslationReady = true
+                                    showModelDialog = false
+                                    if (resumeStartAfterDownload) {
+                                        resumeStartAfterDownload = false
+                                        requestScreenCapture()
+                                    }
+                                }
+                            }
+                        },
+                        onNotNow = {
+                            resumeStartAfterDownload = false
+                            showModelDialog = false
+                            modelManager.clearFailure()
+                        }
+                    )
+                }
+
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (showPrivacy) {
+                    if (showSettings && !showPrivacy) {
+                        SettingsScreen(
+                            installedLanguages = installedLanguages,
+                            opState = opState,
+                            wifiOnly = wifiOnly,
+                            versionName = BuildConfig.VERSION_NAME,
+                            onWifiOnlyChange = { wifiOnly = it; preferences.downloadWifiOnly = it },
+                            onDownloadLanguage = { code ->
+                                lifecycleScope.launch {
+                                    modelManager.downloadLanguage(code, wifiOnly)
+                                    refreshTranslationReady()
+                                }
+                            },
+                            onDeleteLanguage = { code ->
+                                lifecycleScope.launch {
+                                    modelManager.deleteLanguage(code)
+                                    refreshTranslationReady()
+                                }
+                            },
+                            onDismissFailure = { modelManager.clearFailure() },
+                            onSupportDeveloper = { openLink(SupportLinks.SUPPORT_DEVELOPER) },
+                            onSendFeedback = { openLink(SupportLinks.FEEDBACK_FORM) },
+                            onOpenPrivacy = { showPrivacy = true },
+                            onBack = { showSettings = false },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    } else if (showPrivacy) {
                         PrivacySection(
                             onDismiss = { showPrivacy = false },
                             modifier = Modifier.padding(innerPadding)
@@ -178,10 +276,12 @@ class MainActivity : ComponentActivity() {
                             onSourceLanguageSelected = { code ->
                                 sourceLanguageCode = code
                                 preferences.sourceLanguageCode = code
+                                refreshTranslationReady()
                             },
                             onTargetLanguageSelected = { code ->
                                 targetLanguageCode = code
                                 preferences.targetLanguageCode = code
+                                refreshTranslationReady()
                             },
                             isCapturing = isCapturing,
                             captureDeniedMessage = captureDeniedMessage,
@@ -194,17 +294,13 @@ class MainActivity : ComponentActivity() {
                                 isCapturing = false
                             },
                             onOpenPrivacyInfo = { showPrivacy = true },
-                            backendUrl = backendUrl,
-                            onBackendUrlSaved = { input ->
-                                val normalized = PreferencesRepository.normalizeBackendUrl(
-                                    input, allowCleartext = com.luma.translate.BuildConfig.DEBUG
-                                )
-                                if (normalized == null) false else {
-                                    preferences.backendUrl = normalized
-                                    backendUrl = normalized
-                                    true
-                                }
+                            isTranslationReady = isTranslationReady,
+                            onDownloadLanguagePacks = {
+                                resumeStartAfterDownload = false
+                                modelManager.clearFailure()
+                                showModelDialog = true
                             },
+                            onOpenSettings = { showSettings = true },
                             modifier = Modifier.padding(innerPadding)
                         )
                     }

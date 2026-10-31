@@ -248,3 +248,11 @@ M  yml_hata.md
 See `docs/AGENT_PROGRESS.md` (Session 4) and `docs/analysis/*`. State: all changes local and uncommitted; nothing pushed.
 Next steps: run `./gradlew testDebugUnitTest assembleDebug` with network; on-device checks (Server settings with an HTTPS
 backend, notification prompt on Android 13+, Hata3 adb output); then commit/push only if the owner asks.
+
+
+## Session 5 update
+State: on-device architecture implemented in source; ZIP delivered for upload to GitHub (no commit/push by the agent, no APK).
+Next: upload ZIP -> run Actions -> fix any compile errors first (none could be checked offline) -> device tests
+(permission flow, pack download/offline translation, overlay, ja/ko/zh quality) -> signing continuity check.
+Key files: translation/TranslationModelManager.kt, translation/TextTranslator.kt, pipeline/TranslationPipeline.kt,
+ui/settings/SettingsScreen.kt, ui/models/ModelDownloadDialog.kt, MainActivity.kt.

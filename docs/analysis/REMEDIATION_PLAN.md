@@ -18,3 +18,11 @@ Order: build/install -> signing/version -> translation errors -> permissions/fir
 ## Open items
 - BUG-08 capture size from display metrics; optional Quick Settings tile; permanent-denial deep link to app settings for overlay is handled by the system overlay screen, notification denial needs none.
 - Run `./gradlew testDebugUnitTest assembleDebug` and `apksigner verify` where the network is available.
+
+
+## Session 5 (supersedes the "Needs the owner's input -> hosting backend" item)
+Done in source: ML Kit on-device translation, consent-based language packs, Settings (pack management, Support, Feedback),
+contextual permissions with denial handling, backend/OkHttp/server-URL removal, CI unit-test step.
+Still needed from the owner: run GitHub Actions and install on a physical device; verify signing continuity (Hata3);
+confirm ML Kit commercial terms; test ja/ko/zh quality and the download/offline flow on a device;
+decide whether a larger optional engine is worth adding (see `docs/MODELS.md`).

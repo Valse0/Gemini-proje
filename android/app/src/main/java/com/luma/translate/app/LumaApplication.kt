@@ -1,14 +1,16 @@
 package com.luma.translate.app
 
 import android.app.Application
+import com.luma.translate.data.PreferencesRepository
+import com.luma.translate.translation.TranslationModelManager
 
 /**
- * Luma Translate Application Entry Point
- * Initializes logging, lifecycle tracking, and on-device OCR resources
+ * Luma Translate application entry point. Holds the single on-device
+ * translation-model manager so the UI and the capture service share state.
+ * No analytics, no network work at startup.
  */
 class LumaApplication : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        // Initialize application state cleanly without unnecessary SDK bloat
+    val modelManager: TranslationModelManager by lazy {
+        TranslationModelManager(this, PreferencesRepository(this))
     }
 }

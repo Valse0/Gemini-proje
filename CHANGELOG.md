@@ -5,6 +5,13 @@ from the first professional-transformation pass on top of commit
 `b56cbea` ("Simplify Android SDK package installation"); earlier history is
 the AI Studio / Gemini CLI scaffold that produced the repository.
 
+## Unreleased - on-device translation
+- Translation now runs on-device (ML Kit); backend/Gemini no longer used by the app.
+- Optional, consent-based language-pack downloads; Settings screen to manage them.
+- Added Support the Developer (Ko-fi) and Send Feedback (Tally) links.
+- Contextual notification permission; clearer overlay/capture denial messages.
+- Removed server-address setting, OkHttp, and debug cleartext exception.
+
 ## Unreleased — Foundation and CI repair pass
 
 ### Fixed

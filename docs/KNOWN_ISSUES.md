@@ -228,3 +228,13 @@ To avoid re-litigating these in a future pass:
 - No hosted backend: translation needs the user to set an HTTPS server address in Server settings.
 - Hata3 install conflict: likely signature mismatch with a previously installed build; one reinstall may be needed. Unproven without device output.
 - Capture size is still fixed 1080x1920/400dpi (BUG-08).
+
+
+## Session 5 (on-device architecture)
+- Nothing in this delivery was compiled, unit-tested, or run on a device (sandbox has no Gradle/Maven access; no APK was built by design).
+- First use of a language pair needs a one-time language-pack download; offline translation is available afterwards.
+- Pack size is not available from ML Kit; the dialog shows Google's documented "around 30 MB" per language.
+- Non-English pair behavior and ja/ko/zh quality unverified on device.
+- `server/` and the web companion remain in the repo but are unused by the app.
+- Signing continuity with the previously installed build is unverified (Hata3).
+- Capture size still fixed at 1080x1920/400dpi (BUG-08).

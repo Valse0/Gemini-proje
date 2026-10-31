@@ -18,13 +18,13 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import com.luma.translate.BuildConfig
+import com.luma.translate.app.LumaApplication
 import com.luma.translate.MainActivity
-import com.luma.translate.data.PreferencesRepository
 import com.luma.translate.ocr.OcrManager
 import com.luma.translate.pipeline.FailureKind
 import com.luma.translate.pipeline.PipelineResult
 import com.luma.translate.pipeline.TranslationPipeline
+import com.luma.translate.translation.MlKitTextTranslator
 import com.luma.translate.translation.SupportedLanguages
 import com.luma.translate.ui.overlay.FloatingOverlayManager
 import com.luma.translate.ui.overlay.OverlayUiState
@@ -69,28 +69,13 @@ class CaptureService : Service() {
     private var sourceLanguage: String = SupportedLanguages.DEFAULT_SOURCE_CODE
     private var targetLanguage: String = SupportedLanguages.DEFAULT_TARGET_CODE
 
-    // Bug 5/6: the end-to-end pipeline that was previously never
-    // instantiated anywhere in the app. OCR stays strictly on-device
-    // (OcrManager, ML Kit); only recognized text + language codes go to the
-    // backend (TranslationPipeline), per docs/PRIVACY.md.
+    // End-to-end pipeline: on-device ML Kit OCR -> on-device ML Kit translation.
+    // Nothing here uses the network; see docs/PRIVACY.md.
     private val ocrManager = OcrManager()
-    private val translationPipeline by lazy {
-        val prefs = PreferencesRepository(this)
-        TranslationPipeline(
-            ocrManager = ocrManager,
-            backendBaseUrlProvider = {
-                prefs.backendUrl.ifBlank { BuildConfig.BACKEND_BASE_URL }
-            },
-            isEmulator = isProbablyEmulator()
-        )
+    private val textTranslatorLazy = lazy {
+        MlKitTextTranslator((application as LumaApplication).modelManager)
     }
-
-    private fun isProbablyEmulator(): Boolean =
-        Build.FINGERPRINT.startsWith("generic") ||
-            Build.FINGERPRINT.contains("emulator") ||
-            Build.MODEL.contains("Emulator") ||
-            Build.MODEL.contains("Android SDK built for") ||
-            Build.PRODUCT.contains("sdk_gphone")
+    private val translationPipeline by lazy { TranslationPipeline(ocrManager, textTranslatorLazy.value) }
 
     // Service-scoped coroutine scope for the pipeline's async work. Tied to
     // the service's own lifecycle (cancelled in stopCapture()/onDestroy()),
@@ -237,7 +222,7 @@ class CaptureService : Service() {
      *
      * Full chain: grab the latest frame from the already-running
      * MediaProjection capture -> on-device ML Kit OCR
-     * (translationPipeline/ocrManager) -> backend translation call -> real
+     * (translationPipeline/ocrManager) -> on-device translation -> real
      * result (or a real, specific error) shown in the overlay. No fake
      * success state is ever shown: every branch below reflects an actual
      * outcome of the pipeline.
@@ -329,6 +314,7 @@ class CaptureService : Service() {
         mediaProjection = null
 
         ocrManager.release()
+        if (textTranslatorLazy.isInitialized()) textTranslatorLazy.value.close()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
     }

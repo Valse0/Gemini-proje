@@ -36,29 +36,22 @@ class PreferencesRepository(context: Context) {
         set(value) = prefs.edit().putString(KEY_TARGET_LANGUAGE, value).apply()
 
     /**
-     * User-entered translation server address (e.g. https://translate.example.com).
-     * Empty string means "not set": the build-time default
-     * (BuildConfig.BACKEND_BASE_URL) is used instead. Needed because the
-     * build default is the emulator-only alias 10.0.2.2, which a physical
-     * phone can never reach (see docs/analysis/BUG_AUDIT.md, BUG-01).
+     * Language pairs (e.g. "ja>en") whose on-device language packs were
+     * downloaded successfully with the user's consent. Cleared for a language
+     * when its pack is removed. See [com.luma.translate.translation.TranslationModelManager].
      */
-    var backendUrl: String
-        get() = prefs.getString(KEY_BACKEND_URL, "") ?: ""
-        set(value) = prefs.edit().putString(KEY_BACKEND_URL, value.trim()).apply()
+    var readyPairs: Set<String>
+        get() = prefs.getStringSet(KEY_READY_PAIRS, emptySet())?.toSet() ?: emptySet()
+        set(value) = prefs.edit().putStringSet(KEY_READY_PAIRS, value.toSet()).apply()
+
+    /** Language-pack downloads wait for an unmetered (Wi-Fi) network unless the user opts out. */
+    var downloadWifiOnly: Boolean
+        get() = prefs.getBoolean(KEY_WIFI_ONLY, true)
+        set(value) = prefs.edit().putBoolean(KEY_WIFI_ONLY, value).apply()
 
     companion object {
-        /** Returns the normalized URL if acceptable, otherwise null. */
-        fun normalizeBackendUrl(input: String, allowCleartext: Boolean): String? {
-            val v = input.trim().trimEnd('/')
-            if (v.isEmpty()) return ""
-            val lower = v.lowercase()
-            val ok = lower.startsWith("https://") || (allowCleartext && lower.startsWith("http://"))
-            if (!ok || v.length > 200 || v.any { it.isWhitespace() }) return null
-            val host = v.substringAfter("://").substringBefore('/').substringBefore(':')
-            return if (host.isEmpty()) null else v
-        }
-
-        private const val KEY_BACKEND_URL = "backend_url"
+        private const val KEY_READY_PAIRS = "ready_pairs"
+        private const val KEY_WIFI_ONLY = "download_wifi_only"
         private const val PREFS_NAME = "luma_preferences"
         private const val KEY_SOURCE_LANGUAGE = "source_language_code"
         private const val KEY_TARGET_LANGUAGE = "target_language_code"

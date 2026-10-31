@@ -1,20 +1,7 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-}
-
-// Loads android/local.properties (git-ignored, machine-local) if present, so
-// a developer can set `LUMA_BACKEND_URL=...` there without passing
-// `-PLUMA_BACKEND_URL=...` on every Gradle invocation. Safe no-op (empty
-// Properties) when the file doesn't exist, e.g. on CI.
-val localProps = Properties().apply {
-    val localPropsFile = rootProject.file("local.properties")
-    if (localPropsFile.exists()) {
-        localPropsFile.inputStream().use { load(it) }
-    }
 }
 
 android {
@@ -41,21 +28,6 @@ android {
         versionName = "0.1.${System.getenv("BUILD_NUMBER") ?: "dev"}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // Configurable backend URL, instead of the hardcoded
-        // "http://10.0.2.2:3000" (Android-emulator-only loopback alias) that
-        // pipeline/TranslationPipeline.kt previously had baked in as its
-        // only option. Override per build with
-        // `-PLUMA_BACKEND_URL=https://your-backend.example.com`, or set it
-        // in `android/local.properties` (git-ignored) as
-        // `LUMA_BACKEND_URL=...`. The emulator-loopback default only works
-        // for local development against a backend running on the same
-        // machine as the emulator; it will not reach anything from a real
-        // device. See docs/KNOWN_ISSUES.md.
-        val backendUrl = (project.findProperty("LUMA_BACKEND_URL") as String?)
-            ?: localProps.getProperty("LUMA_BACKEND_URL")
-            ?: "http://10.0.2.2:3000"
-        buildConfigField("String", "BACKEND_BASE_URL", "\"$backendUrl\"")
     }
 
     signingConfigs {
@@ -136,8 +108,8 @@ android {
 
     buildFeatures {
         compose = true
-        // Required for buildConfigField(...) above (BACKEND_BASE_URL) to
-        // actually generate a BuildConfig class. Off by default since AGP 8.
+        // BuildConfig (VERSION_NAME, DEBUG) is used by the Settings screen.
+        // Off by default since AGP 8.
         buildConfig = true
     }
 }
@@ -159,8 +131,9 @@ dependencies {
     implementation(libs.mlkit.text.korean)
     implementation(libs.mlkit.text.chinese)
 
-    // Backend HTTP Client
-    implementation(libs.okhttp)
+    // ML Kit On-device Translation. Models are downloaded on demand, only
+    // after explicit user consent (see translation/TranslationModelManager.kt).
+    implementation(libs.mlkit.translate)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)

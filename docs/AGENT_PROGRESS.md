@@ -466,3 +466,14 @@ instruction at the top of this task.
   (services.gradle.org refused). Only static checks (brace/paren/comment balance) were run.
 - Not done (needs approval): key creation/replacement, package rename, uninstall, push/deploy, backend hosting.
 - Hata3 remains a diagnosis (signature mismatch most likely), needs adb/apksigner output from the phone.
+
+
+## Session 5 - Complete audit / on-device translation (no APK built, nothing pushed)
+- Pulled origin/main 863d578 non-destructively (it already contained session-4 work + a lint fix).
+- Replaced backend translation with ML Kit on-device translation; removed OkHttp, BACKEND_BASE_URL, server-settings UI,
+  debug cleartext exception, dead backend contract classes and the fake `backendEndpoint` in ReleaseInspector.
+- Added TranslationModelManager (consent-based download, Wi-Fi-only, storage/network preflight, delete), ModelDownloadDialog,
+  SettingsScreen (packs, Ko-fi, Tally, About), external-link helper, overlay-denial message, scrollable Home.
+- Tests rewritten for the new contracts (TranslationFailureTest, TranslationContractTest). Not executed.
+- CI: added non-blocking unit-test step + report artifact.
+- Docs: README banner, docs/MODELS.md, docs/CURRENT_STATE.md, banners on legacy backend docs, PRIVACY current-behavior section.

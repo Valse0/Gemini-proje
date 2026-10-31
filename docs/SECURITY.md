@@ -1,5 +1,14 @@
 # Security Requirements — Luma Translate
 
+> **Update (on-device architecture):** the Android app no longer uses a
+> backend or any remote translation provider. Translation is performed
+> on-device with Google ML Kit; language packs are optional, consent-based
+> downloads. Sections below that describe a backend, Gemini, provider keys,
+> or server-side rate limits apply only to the legacy `server/` project and
+> are not part of the shipped app. Current behavior: `docs/MODELS.md`,
+> `docs/PRIVACY.md` (top section), `docs/analysis/`.
+
+
 ## 1. Scope
 
 This document defines minimum security requirements for the Android app,

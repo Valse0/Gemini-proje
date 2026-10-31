@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,23 +40,15 @@ fun HomeScreen(
     onStartCapture: () -> Unit,
     onStopCapture: () -> Unit,
     onOpenPrivacyInfo: () -> Unit,
-    backendUrl: String = "",
-    onBackendUrlSaved: (String) -> Boolean = { true },
+    isTranslationReady: Boolean,
+    onDownloadLanguagePacks: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showServerDialog by remember { mutableStateOf(false) }
     var pickerTarget by remember { mutableStateOf(LanguagePickerTarget.NONE) }
 
     val sourceLanguage = SupportedLanguages.sourceLanguageOrDefault(sourceLanguageCode)
     val targetLanguage = SupportedLanguages.targetLanguageOrDefault(targetLanguageCode)
-
-    if (showServerDialog) {
-        ServerSettingsDialog(
-            current = backendUrl,
-            onSave = { value -> if (onBackendUrlSaved(value)) { showServerDialog = false; true } else false },
-            onDismiss = { showServerDialog = false }
-        )
-    }
 
     if (pickerTarget != LanguagePickerTarget.NONE) {
         LanguagePickerDialog(
@@ -81,8 +75,11 @@ fun HomeScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
             .padding(20.dp),
-        verticalArrangement = Arrangement.SpaceBetween
+        // Scrollable (previously a fixed, bottom-pinned layout) so the added
+        // language-pack card can't push the action button off small screens.
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
         // Header Section
         Column {
@@ -103,14 +100,27 @@ fun HomeScreen(
                         color = Color.Gray
                     )
                 }
-                IconButton(onClick = onOpenPrivacyInfo) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("🛡️", fontSize = 16.sp)
+                Row {
+                    IconButton(onClick = onOpenSettings) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("⚙️", fontSize = 16.sp)
+                            }
+                        }
+                    }
+                    IconButton(onClick = onOpenPrivacyInfo) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("🛡️", fontSize = 16.sp)
+                            }
                         }
                     }
                 }
@@ -206,6 +216,40 @@ fun HomeScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Offline language pack status. Translation is fully on-device, so
+            // the only "setup" is an optional, consent-based language pack download.
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (isTranslationReady) "Offline translation ready" else "Language pack needed",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (isTranslationReady) {
+                            "${sourceLanguage.displayName} to ${targetLanguage.displayName} is translated on this phone, without internet."
+                        } else {
+                            "Translating ${sourceLanguage.displayName} to ${targetLanguage.displayName} needs a one-time language pack download. " +
+                                "It's optional and never uploads your screen text. You can also manage packs in Settings."
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                    if (!isTranslationReady) {
+                        OutlinedButton(onClick = onDownloadLanguagePacks, shape = RoundedCornerShape(10.dp)) {
+                            Text("Download language packs")
+                        }
+                    }
+                }
+            }
         }
 
         // Action Section (Bottom)
@@ -281,16 +325,6 @@ fun HomeScreen(
                         modifier = Modifier.padding(12.dp)
                     )
                 }
-            }
-
-            TextButton(
-                onClick = { showServerDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = if (backendUrl.isBlank()) "Server settings (not set)" else "Server settings",
-                    style = MaterialTheme.typography.labelMedium
-                )
             }
 
             TextButton(
@@ -374,47 +408,4 @@ private fun LanguagePickerDialog(
             }
         }
     }
-}
-
-/**
- * Lets the user point Luma at their own translation server. Only text (never
- * images) is sent there. The field is validated by the caller; an invalid
- * value keeps the dialog open with an explanation.
- */
-@Composable
-private fun ServerSettingsDialog(
-    current: String,
-    onSave: (String) -> Boolean,
-    onDismiss: () -> Unit
-) {
-    var text by remember { mutableStateOf(current) }
-    var error by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Server settings") },
-        text = {
-            Column {
-                Text(
-                    "Address of your Luma translation server, e.g. https://translate.example.com. " +
-                        "Only recognized text is sent there, never screenshots.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it; error = false },
-                    singleLine = true,
-                    isError = error,
-                    label = { Text("Server address") },
-                    supportingText = if (error) {
-                        { Text("Enter a valid https:// address.") }
-                    } else null
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { error = !onSave(text) }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
 }

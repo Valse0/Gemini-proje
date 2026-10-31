@@ -26,3 +26,14 @@ Low = hypothesis needing device data. Nothing below was reproduced on a device f
 - Most likely cause (Medium): the installed copy was signed with a different certificate (CI previously generated a random debug key per run). Alternatives: same applicationId from a different source, or lower versionCode (Low).
 - Cannot be proven without: `adb install -r app.apk` output (INSTALL_FAILED_UPDATE_INCOMPATIBLE vs VERSION_DOWNGRADE), `apksigner verify --print-certs` for both APKs, `adb shell dumpsys package <id> | grep versionCode`.
 - Done: committed shared debug keystore so future debug builds are stable; versionCode monotonic. **Not done (needs approval):** uninstalling the old app, creating/replacing any release key, changing the package name. The committed debug keystore is a new identity, so one reinstall is likely needed once.
+
+
+## Session 5 update (on-device architecture)
+- BUG-01/02/04/09 are now resolved **by removal of the cause**: the app has no backend, no server address, no raw network
+  exception text, and the debug cleartext exception for 10.0.2.2 was removed. Server-settings UI from session 4 was removed.
+- New risk R-01 (P1, Medium): ML Kit pack download depends on Google Play services availability/connectivity; failure paths
+  are handled in code but untested on a device.
+- New risk R-02 (P2, Medium): ML Kit does not expose pack size, so the consent dialog cannot show an exact size.
+- New risk R-03 (P2, Low): non-English pair behavior (English intermediate) is undocumented; the app relies only on
+  `downloadModelIfNeeded` for the pair and re-prompts if translation reports a missing pack.
+- BUG-03 (Hata3) unchanged: needs adb/apksigner output; no key/package change made.

@@ -1,5 +1,26 @@
 # Privacy Policy and Data Handling — Luma Translate
 
+## Current behavior (on-device architecture)
+
+- **OCR:** on-device (Google ML Kit text recognition). Screenshots are never uploaded.
+- **Translation:** on-device (Google ML Kit Translation). Recognized and translated
+  text is not sent to any server, and is not logged or stored.
+- **Network use:** only the optional language-pack download, started only after the
+  user taps Download (Wi-Fi only by default). The download fetches model files; it does
+  not upload screen text.
+- **Google ML Kit** may contact Google for model downloads/updates and may send
+  performance/usage metrics under Google's ML Kit terms. The SDK states that input
+  text is processed on-device and not sent to Google servers. Verify the current
+  terms before each release; the app owner is responsible for the disclosures those
+  terms require.
+- **No accounts, no API keys, no analytics, no translation history.**
+- **Support / Feedback** links open https://ko-fi.com/hepyek and https://tally.so/r/aO9QkW in
+  the external browser; no data is sent by the app itself.
+- **Not yet tested on a physical device.**
+
+The sections below describe the earlier backend design and apply only to the legacy `server/` project.
+
+
 ## 1. Purpose
 
 This document defines the intended privacy behavior of Luma Translate.

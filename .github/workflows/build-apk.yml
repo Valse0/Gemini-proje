@@ -69,6 +69,28 @@ jobs:
         with:
           build-root-directory: android
 
+      # Unit tests run first and are reported, but they do not block APK
+      # generation: a failing test shows up as a failed step (and a test-report
+      # artifact below) while the debug APK is still produced for inspection.
+      - name: Run unit tests
+        id: unit_tests
+        continue-on-error: true
+        working-directory: android
+        run: |
+          set -euo pipefail
+          ./gradlew testDebugUnitTest --stacktrace 2>&1 | tee ../unit_test.log
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          path: |
+            android/app/build/reports/tests/
+            unit_test.log
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Build Debug APK
         working-directory: android
         # `set -o pipefail` is explicit here (GitHub's default bash
